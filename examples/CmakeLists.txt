@@ -1,0 +1,10 @@
+function(MakeExample TARGETNAME FILENAME)
+	add_executable(${TARGETNAME} ${FILENAME})
+	set_property(TARGET ${TARGETNAME} PROPERTY CXX_STANDARD 20)
+	set_property(TARGET ${TARGETNAME} PROPERTY FOLDER examples)
+	target_link_libraries(${TARGETNAME} PRIVATE cgraphics)
+	target_include_directories(${TARGETNAME} PRIVATE ${CGRAPHICS_INCLUDE_DIRECTORY} ${LIBS_INCLUDE_DIRECTORIES})
+
+endfunction(MakeExample)
+
+MakeExample(1_SimpleQuad 1_SimpleQuad/simpleQuad.cpp)
