@@ -1,8 +1,11 @@
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
 
+#include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtc/type_ptr.hpp>
+
 #include "shaders/shader.hpp"
-#include "performanceMonitor.hpp"
 #include "root_directory.h"
 
 #include <iostream>
@@ -29,10 +32,9 @@ int main()
     glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
 #endif
 
-    string title = "Simple Quad";
     // glfw window creation
     // --------------------
-    GLFWwindow* window = glfwCreateWindow(SCR_WIDTH, SCR_HEIGHT, title.c_str(), NULL, NULL);
+    GLFWwindow* window = glfwCreateWindow(SCR_WIDTH, SCR_HEIGHT, "Transformations", NULL, NULL);
     if (window == NULL)
     {
         cout << "Failed to create GLFW window" << endl;
@@ -52,7 +54,8 @@ int main()
 
     // build and compile our shader program
     // ------------------------------------
-    Shader basicShader(getPath("source/shaders/basicShader.vs").string().c_str(), getPath("source/shaders/basicShader.fs").string().c_str()); // you can name your shader files however you like
+    Shader transformShader(getPath("source/shaders/transformShader.vs").string().c_str(), 
+                           getPath("source/shaders/transformShader.fs").string().c_str() ); // you can name your shader files however you like
 
     // set up vertex data (and buffer(s)) and configure vertex attributes
     // ------------------------------------------------------------------
@@ -94,18 +97,12 @@ int main()
     // VAOs requires a call to glBindVertexArray anyways so we generally don't unbind VAOs (nor VBOs) when it's not directly necessary.
     // glBindVertexArray(0);
 
-    PerformanceMonitor pMonitor(glfwGetTime(), 0.5f);
 
     bool fillPolygon = true;
     // render loop
     // -----------
     while (!glfwWindowShouldClose(window))
     {
-        pMonitor.update(glfwGetTime());
-        stringstream ss;
-        ss << title << " " << pMonitor;
-        glfwSetWindowTitle(window, ss.str().c_str());
-
         // input
         // -----
         processInput(window, &fillPolygon);
@@ -120,10 +117,58 @@ int main()
         else
             glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
 
-        // render the triangle
-        basicShader.use();
+        transformShader.use();
+
+        // render 
+        // create transformations
+        glm::mat4 transform = glm::mat4(1.0f); // make sure to initialize matrix to identity matrix first
+        transform = glm::translate(transform, glm::vec3(0.5f, -0.5f, 0.0f));
+        transform = glm::rotate(transform, (float)glfwGetTime(), glm::vec3(0.0f, 0.0f, 1.0f));
+
+        // transformation 1 
+        glm::mat4 transform1 = glm::mat4(1.0f); 
+        transform1 = glm::translate(transform1, glm::vec3(-0.5f, 0.5f, 0.0f));
+        transform1 = glm::rotate(transform1, (float)glfwGetTime(), glm::vec3(0.0f, 0.0f, 1.0f));
+        transform1 = glm::scale(transform1, glm::vec3(0.7f, 0.7f, 0.7f));
+
+        // transformation 2
+        glm::mat4 transform2 = glm::mat4(1.0f);
+        transform2 = glm::translate(transform2, glm::vec3(0.5f, 0.5f, 0.0f));
+        transform2 = glm::scale(transform2, glm::vec3(0.2f * glm::sin((float)glfwGetTime())+0.6f, 0.2f * glm::sin((float)glfwGetTime()) + 0.6f, 1.0f));
+
+        // transformation 3
+        glm::mat4 transform3 = glm::mat4(1.0f);
+        transform3 = glm::translate(transform3, glm::vec3(-0.5f, -0.5f, 0.0f));
+        transform3 = glm::scale(transform3, glm::vec3(0.2f * glm::cos((float)glfwGetTime()) + 0.6f, 0.2f * glm::sin((float)glfwGetTime()) + 0.6f, 1.0f));
+
+        // transformation 4
+        glm::mat4 transform4 = glm::mat4(1.0f);
+        transform4 = glm::translate(transform4, glm::vec3(0.5f, -0.5f, 0.0f));
+        transform4 = glm::translate(transform4, glm::vec3(0.35*glm::sin((float)glfwGetTime()), 0.35 * glm::sin((float)glfwGetTime()), 0.0f));
+        transform4 = glm::scale(transform4, glm::vec3(0.3f, 0.3f, 0.3f));
+
+        // get matrix's uniform location and set matrix
+        transformShader.use();
+        unsigned int transformLoc = glGetUniformLocation(transformShader.ID, "transform");
+
+        // Render quad 1
+        glUniformMatrix4fv(transformLoc, 1, GL_FALSE, glm::value_ptr(transform1));
         glBindVertexArray(VAO);
-        // glDrawArrays(GL_TRIANGLES, 0, 3);
+        glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
+
+        // Render quad 2
+        glUniformMatrix4fv(transformLoc, 1, GL_FALSE, glm::value_ptr(transform2));
+        glBindVertexArray(VAO);
+        glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
+
+        // Render quad 3
+        glUniformMatrix4fv(transformLoc, 1, GL_FALSE, glm::value_ptr(transform3));
+        glBindVertexArray(VAO);
+        glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
+
+        // Render quad 4
+        glUniformMatrix4fv(transformLoc, 1, GL_FALSE, glm::value_ptr(transform4));
+        glBindVertexArray(VAO);
         glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
 
         // glfw: swap buffers and poll IO events (keys pressed/released, mouse moved etc.)
@@ -151,7 +196,7 @@ void processInput(GLFWwindow* window, bool* fill)
     if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
         glfwSetWindowShouldClose(window, true);
 
-    if (glfwGetKey(window, GLFW_KEY_SPACE) ==  GLFW_PRESS )
+    if (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS)
         *fill = false;
 
     if (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_RELEASE)

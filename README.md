@@ -1,7 +1,7 @@
 # cgraphics_cpp
 OpenGL example code in C++ language 
 
-Based on [LearnOpenGL](https://learnopengl.com/) and [dantros/grafica_cpp](https://github.com/dantros/grafica_cpp) resources
+Based on [LearnOpenGL](https://learnopengl.com/), [dantros/grafica_cpp](https://github.com/dantros/grafica_cpp) and [OGLdev](https://ogldev.org/) resources
 
 ## Compilation and execution
 

@@ -7,4 +7,5 @@ function(MakeExample TARGETNAME FILENAME)
 
 endfunction(MakeExample)
 
-MakeExample(1_SimpleQuad 1_SimpleQuad/simpleQuad.cpp)
+MakeExample(01_SimpleQuad 01_SimpleQuad/simpleQuad.cpp)
+MakeExample(02_Transformations 02_Transformations/transformations.cpp)
