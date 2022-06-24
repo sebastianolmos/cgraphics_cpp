@@ -9,3 +9,7 @@ endfunction(MakeExample)
 
 MakeExample(01_SimpleQuad 01_SimpleQuad/simpleQuad.cpp)
 MakeExample(02_Transformations 02_Transformations/transformations.cpp)
+MakeExample(03_SimpleTexture 03_SimpleTexture/simpleTexture.cpp)
+MakeExample(04_BindTextures 04_BindTextures/bindTextures.cpp)
+MakeExample(05_Simple3DTexture 05_Simple3DTexture/simple3DTexture.cpp)
+MakeExample(06_Multiple3D 06_Multiple3D/multiple3D.cpp)
