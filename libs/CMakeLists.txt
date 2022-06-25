@@ -14,4 +14,5 @@ endfunction()
 
 add_subdirectory_with_folder("libs" glad)
 add_subdirectory_with_folder("libs" glfw)
+add_subdirectory_with_folder("libs" imgui-1.78)
 add_subdirectory_with_folder("libs" stb)
