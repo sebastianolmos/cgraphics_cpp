@@ -182,6 +182,7 @@ int main()
     bool show_demo_window = true;
     bool show_another_window = false;
     ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
+    static float f = 0.0f;
 
     PerformanceMonitor pMonitor(glfwGetTime(), 0.5f);
 
@@ -220,19 +221,16 @@ int main()
         lightingShader.setVec3("viewPos", camera.Position);
 
         // light properties
-        glm::vec3 lightColor;
-        lightColor.x = sin(glfwGetTime() * 2.0f);
-        lightColor.y = sin(glfwGetTime() * 0.7f);
-        lightColor.z = sin(glfwGetTime() * 1.3f);
-        glm::vec3 diffuseColor = lightColor * glm::vec3(0.5f); // decrease the influence
+        glm::vec3 lightColor = glm::vec3(0.8f, 0.8f, 0.8f);
+        glm::vec3 diffuseColor = glm::vec3(clear_color.x, clear_color.y, clear_color.z);// decrease the influence
         glm::vec3 ambientColor = diffuseColor * glm::vec3(0.2f); // low influence
         lightingShader.setVec3("light.ambient", ambientColor);
         lightingShader.setVec3("light.diffuse", diffuseColor);
-        lightingShader.setVec3("light.specular", 1.0f, 1.0f, 1.0f);
+        lightingShader.setVec3("light.specular", glm::vec3(f, f, f));
 
         // material properties
-        lightingShader.setVec3("material.ambient", 1.0f, 0.5f, 0.31f);
-        lightingShader.setVec3("material.diffuse", 1.0f, 0.5f, 0.31f);
+        lightingShader.setVec3("material.ambient", 0.5f, 0.5f, 0.5f);
+        lightingShader.setVec3("material.diffuse", 0.5f, 0.5f, 0.5f);
         lightingShader.setVec3("material.specular", 0.5f, 0.5f, 0.5f); // specular lighting doesn't have full effect on this object's material
         lightingShader.setFloat("material.shininess", 32.0f);
 
@@ -267,7 +265,6 @@ int main()
 
         // 2. Show a simple window that we create ourselves. We use a Begin/End pair to created a named window.
         {
-            static float f = 0.0f;
             static int counter = 0;
 
             ImGui::Begin("Hello, world!");                          // Create a window called "Hello, world!" and append into it.
