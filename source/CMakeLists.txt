@@ -4,6 +4,8 @@ set(CGRAPHICS_HEADERS
         cameras/cameraFirstPerson.hpp
         shaders/shader.hpp
         performanceMonitor.hpp
+        mesh.hpp
+        model.hpp
 		)
 set(CGRAPHICS_SOURCES
 		shaders/shader.cpp
