@@ -58,6 +58,20 @@ struct DirectionalLight {
     glm::vec3 specular;
 };
 
+struct SpotLight {
+    glm::vec3 position;
+    glm::vec3 direction;
+    float cutOff;
+    float outerCutOff;
+    glm::vec3 ambient;
+    glm::vec3 diffuse;
+    glm::vec3 specular;
+    // attenuation
+    float constant;
+    float linear;
+    float quadratic;
+};
+
 enum ELightType {
     Point,
     Directional,
@@ -137,6 +151,10 @@ int main()
                                getPath("source/shaders/DirLightTexturedShader.fs").string().c_str() );
     Shader dirLightClrShader(getPath("source/shaders/DirLightColoredShader.vs").string().c_str(), 
                                getPath("source/shaders/DirLightColoredShader.fs").string().c_str() );
+    Shader spotLightTexShader(getPath("source/shaders/SpotLightTexturedShader.vs").string().c_str(), 
+                               getPath("source/shaders/SpotLightTexturedShader.fs").string().c_str() );
+    Shader spotLightClrShader(getPath("source/shaders/SpotLightColoredShader.vs").string().c_str(), 
+                               getPath("source/shaders/SpotLightColoredShader.fs").string().c_str() );
     Shader lightCubeShader(getPath("source/shaders/colorMVPShader.vs").string().c_str(), 
                            getPath("source/shaders/colorMVPShader.fs").string().c_str() );
     Shader* currentLightTexShader = nullptr;
@@ -151,11 +169,24 @@ int main()
     pointLight->constant = 1.0f;
     pointLight->linear = 0.09f;
     pointLight->quadratic = 0.032f;
+
     DirectionalLight* dirLight = new DirectionalLight;
     dirLight->direction = glm::vec3(1.0f, -1.0f, 0.0f);
     dirLight->ambient = glm::vec3(0.5f);
     dirLight->diffuse = glm::vec3(1.0f);
     dirLight->specular = glm::vec3(1.0f);
+
+    SpotLight* spotLight = new SpotLight;
+    spotLight->position = glm::vec3(1.0f);
+    spotLight->direction = glm::vec3(1.0f);
+    spotLight->cutOff = glm::cos(glm::radians(12.5f));
+    spotLight->outerCutOff = glm::cos(glm::radians(17.5f));
+    spotLight->ambient = glm::vec3(0.1f);
+    spotLight->diffuse = glm::vec3(1.0f);
+    spotLight->specular = glm::vec3(1.0f);
+    spotLight->constant = 1.0f;
+    spotLight->linear = 0.09f;
+    spotLight->quadratic = 0.032f;
 
     // Render batches
     RenderBatch phongTexObjects;
@@ -238,6 +269,10 @@ int main()
             currentLightTexShader = &dirLightTexShader;
             currentLightClrShader = &dirLightClrShader;
             break;
+        case ELightType::Spot:
+            currentLightTexShader = &spotLightTexShader;
+            currentLightClrShader = &spotLightClrShader;
+            break;
         default:
             break;
         }
@@ -259,6 +294,21 @@ int main()
             currentLightTexShader->setVec3("light.ambient", dirLight->ambient);
             currentLightTexShader->setVec3("light.diffuse", dirLight->diffuse);
             currentLightTexShader->setVec3("light.specular", dirLight->specular);
+        }
+        else if (currentLighting==ELightType::Spot)
+        {
+            spotLight->position = camera.Position;
+            spotLight->direction = camera.Front;
+            currentLightTexShader->setVec3("light.position", spotLight->position);
+            currentLightTexShader->setVec3("light.direction", spotLight->direction);
+            currentLightTexShader->setVec3("light.ambient", spotLight->ambient);
+            currentLightTexShader->setVec3("light.diffuse", spotLight->diffuse);
+            currentLightTexShader->setVec3("light.specular", spotLight->specular);
+            currentLightTexShader->setFloat("light.cutOff", spotLight->cutOff);
+            currentLightTexShader->setFloat("light.outerCutOff", spotLight->outerCutOff);
+            currentLightTexShader->setFloat("light.constant", spotLight->constant);
+            currentLightTexShader->setFloat("light.linear", spotLight->linear);
+            currentLightTexShader->setFloat("light.quadratic", spotLight->quadratic);	
         }
         // view/projection transformations
         currentLightTexShader->setVec3("viewPos", camera.Position);
@@ -296,6 +346,19 @@ int main()
             currentLightClrShader->setVec3("light.ambient", dirLight->ambient);
             currentLightClrShader->setVec3("light.diffuse", dirLight->diffuse);
             currentLightClrShader->setVec3("light.specular", dirLight->specular);
+        }
+        else if (currentLighting==ELightType::Spot)
+        {
+            currentLightClrShader->setVec3("light.position", spotLight->position);
+            currentLightClrShader->setVec3("light.direction", spotLight->direction);
+            currentLightClrShader->setVec3("light.ambient", spotLight->ambient);
+            currentLightClrShader->setVec3("light.diffuse", spotLight->diffuse);
+            currentLightClrShader->setVec3("light.specular", spotLight->specular);
+            currentLightClrShader->setFloat("light.cutOff", spotLight->cutOff);
+            currentLightClrShader->setFloat("light.outerCutOff", spotLight->outerCutOff);
+            currentLightClrShader->setFloat("light.constant", spotLight->constant);
+            currentLightClrShader->setFloat("light.linear", spotLight->linear);
+            currentLightClrShader->setFloat("light.quadratic", spotLight->quadratic);	
         }
         // view/projection transformations
         currentLightClrShader->setVec3("viewPos", camera.Position);
