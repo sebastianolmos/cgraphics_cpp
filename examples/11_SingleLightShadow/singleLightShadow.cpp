@@ -155,10 +155,10 @@ int main()
                                getPath("source/shaders/PointLightTexturedShader.fs").string().c_str() );
     Shader pointLightClrShader(getPath("source/shaders/PointLightColoredShader.vs").string().c_str(), 
                                getPath("source/shaders/PointLightColoredShader.fs").string().c_str() );
-    Shader dirLightTexShader(getPath("source/shaders/DirLightTexturedShader.vs").string().c_str(), 
-                               getPath("source/shaders/DirLightTexturedShader.fs").string().c_str() );
-    Shader dirLightClrShader(getPath("source/shaders/DirLightColoredShader.vs").string().c_str(), 
-                               getPath("source/shaders/DirLightColoredShader.fs").string().c_str() );
+    Shader dirLightTexShader(getPath("source/shaders/DirLightShadowTexShader.vs").string().c_str(), 
+                               getPath("source/shaders/DirLightShadowTexShader.fs").string().c_str() );
+    Shader dirLightClrShader(getPath("source/shaders/DirLightShadowClrShader.vs").string().c_str(), 
+                               getPath("source/shaders/DirLightShadowClrShader.fs").string().c_str() );
     Shader spotLightTexShader(getPath("source/shaders/SpotLightTexturedShader.vs").string().c_str(), 
                                getPath("source/shaders/SpotLightTexturedShader.fs").string().c_str() );
     Shader spotLightClrShader(getPath("source/shaders/SpotLightColoredShader.vs").string().c_str(), 
@@ -199,6 +199,11 @@ int main()
     // --------------------
     depthDebugShader.use();
     depthDebugShader.setInt("depthMap", 0);
+    dirLightTexShader.use();
+    dirLightTexShader.setInt("texture_diffuse0", 0);
+    dirLightTexShader.setInt("shadowMap", 1);
+    dirLightClrShader.use();
+    dirLightClrShader.setInt("shadowMap", 0);
      
     // Lights settings
     PointLight* pointLight = new PointLight;
@@ -324,8 +329,9 @@ int main()
         // --------------------------------------------------------------
         glm::mat4 lightProjection, lightView;
         glm::mat4 lightSpaceMatrix;
-        float nearPlane = 1.0f, farPlane = 17.5f;
-        lightProjection = glm::ortho(-10.0f, 10.0f, -10.0f, 10.0f, nearPlane, farPlane);
+        float nearPlane = 0.1f, farPlane = 17.5f;
+        float orthoDim = 10.0f;
+        lightProjection = glm::ortho(-orthoDim, orthoDim, -orthoDim, orthoDim, nearPlane, farPlane);
         glm::vec3 dirLightPos = glm::vec3(-4.0f, 4.0f, 0.0f);
         lightView = glm::lookAt(dirLightPos, dirLightPos + glm::normalize(dirLight->direction), glm::vec3(0.0, 1.0, 0.0));
         lightSpaceMatrix = lightProjection * lightView;
@@ -375,6 +381,8 @@ int main()
         else if (currentLighting==ELightType::Directional)
         {
             currentLightTexShader->setVec3("light.direction", dirLight->direction);
+            currentLightTexShader->setVec3("light.position", dirLightPos);
+            currentLightTexShader->setMat4("lightSpaceMat", lightSpaceMatrix);
             currentLightTexShader->setVec3("light.ambient", dirLight->ambient);
             currentLightTexShader->setVec3("light.diffuse", dirLight->diffuse);
             currentLightTexShader->setVec3("light.specular", dirLight->specular);
@@ -407,7 +415,10 @@ int main()
             currentLightTexShader->setFloat("material.shininess", toRender->shininess);
             currentLightTexShader->setMat4("model", toRender->transform);
             // bind textures on corresponding texture units
+            glActiveTexture(GL_TEXTURE0);
             glBindTexture(GL_TEXTURE_2D, toRender->textureId);
+            glActiveTexture(GL_TEXTURE1);
+            glBindTexture(GL_TEXTURE_2D, depthMap);
             glBindVertexArray(toRender->VAO);
             glDrawElements(GL_TRIANGLES, toRender->indexCount, GL_UNSIGNED_INT, 0);
         }
@@ -427,6 +438,8 @@ int main()
         else if (currentLighting==ELightType::Directional)
         {
             currentLightClrShader->setVec3("light.direction", dirLight->direction);
+            currentLightClrShader->setVec3("light.position", dirLightPos);
+            currentLightClrShader->setMat4("lightSpaceMat", lightSpaceMatrix);
             currentLightClrShader->setVec3("light.ambient", dirLight->ambient);
             currentLightClrShader->setVec3("light.diffuse", dirLight->diffuse);
             currentLightClrShader->setVec3("light.specular", dirLight->specular);
@@ -456,6 +469,9 @@ int main()
             currentLightClrShader->setFloat("material.shininess", toRender->shininess);
             currentLightClrShader->setVec3("color", toRender->color);
             currentLightClrShader->setMat4("model", toRender->transform);
+            
+            glActiveTexture(GL_TEXTURE0);
+            glBindTexture(GL_TEXTURE_2D, depthMap);
             // bind textures on corresponding texture units
             glBindVertexArray(toRender->VAO);
             glDrawElements(GL_TRIANGLES, toRender->indexCount, GL_UNSIGNED_INT, 0);
