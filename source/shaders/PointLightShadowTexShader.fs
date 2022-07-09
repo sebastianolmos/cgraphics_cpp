@@ -9,26 +9,28 @@ struct Material {
 }; 
 
 struct Light {
-    // We need to render the scene from a light's perspective and thus render the scene from a 
-    // position somewhere along the lines of the light direction.
     vec3 position;
-
     vec3 ambient;
     vec3 diffuse;
     vec3 specular;
+    // attenuation
+    float constant;
+    float linear;
+    float quadratic;
 };
 
 in vec3 FragPos;  
-in vec3 Normal;
+in vec2 FragTexCoords;
+in vec3 Normal;  
 in vec4 FragPosLightSpace;
 
 // texture samplers
+uniform sampler2D texture_diffuse0;
 uniform sampler2D shadowMap;
   
 uniform vec3 viewPos;
 uniform Material material;
 uniform Light light;
-uniform vec3 color;
 
 float ShadowCalculation(vec4 fragPosLightSpace)
 {
@@ -53,7 +55,8 @@ float ShadowCalculation(vec4 fragPosLightSpace)
     {
         for(int y = -1; y <= 1; ++y)
         {
-            float pcfDepth = texture(shadowMap, projCoords.xy + vec2(x, y) * texelSize).r; 
+            float depthValue = texture(shadowMap, projCoords.xy + vec2(x, y) * texelSize).r;
+            float pcfDepth = depthValue; 
             shadow += currentDepth - bias > pcfDepth  ? 1.0 : 0.0;        
         }    
     }
@@ -75,7 +78,7 @@ void main()
     vec3 norm = normalize(Normal);
     vec3 lightDir = normalize(light.position - FragPos);
     float diff = max(dot(norm, lightDir), 0.0);
-    vec3 diffuse = light.diffuse * (diff * material.diffuse);  
+    vec3 diffuse = light.diffuse * (diff * material.diffuse);
     
     // specular
     vec3 viewDir = normalize(viewPos - FragPos);
@@ -83,9 +86,14 @@ void main()
     float spec = pow(max(dot(norm, halfwayDir), 0.0), material.shininess);
     vec3 specular = light.specular * (spec * material.specular);  
 
+    float distance = length(light.position - FragPos);
+    float attenuation = light.constant + light.linear * distance + 
+    		    light.quadratic * (distance * distance); 
+    vec4 fragOriginalColor = texture(texture_diffuse0, FragTexCoords);
+
     // calculate shadow
     float shadow = ShadowCalculation(FragPosLightSpace);
-        
-    vec3 result = (ambient + (1.0 - shadow)*(diffuse + specular)) * color;
-    FragColor = vec4(result, 1.0);
+
+    vec3 result = (ambient + (1.0 - shadow)*((diffuse + specular)/attenuation) ) * fragOriginalColor.rgb;
+    FragColor = vec4(result, fragOriginalColor[3]);
 } 
