@@ -90,6 +90,14 @@ struct SpotLight {
     float constant;
     float linear;
     float quadratic;
+    // Shadows
+    unsigned int depthMap;
+    unsigned int depthMapFBO;
+    glm::mat4 spaceMatrix;
+    glm::mat4 projection;
+    glm::mat4 view;
+    float nearPlane;
+    float farPlane;
 };
 
 enum ELightType {
@@ -141,7 +149,7 @@ int main()
 
     // glfw window creation
     // --------------------
-    string title = "Single Lighting";
+    string title = "Single Lighting Shadow";
     GLFWwindow* window = glfwCreateWindow(SCR_WIDTH, SCR_HEIGHT, title.c_str(), NULL, NULL);
     if (window == NULL)
     {
@@ -179,10 +187,10 @@ int main()
                                getPath("source/shaders/DirLightShadowTexShader.fs").string().c_str() );
     Shader dirLightClrShader(getPath("source/shaders/DirLightShadowClrShader.vs").string().c_str(), 
                                getPath("source/shaders/DirLightShadowClrShader.fs").string().c_str() );
-    Shader spotLightTexShader(getPath("source/shaders/SpotLightTexturedShader.vs").string().c_str(), 
-                               getPath("source/shaders/SpotLightTexturedShader.fs").string().c_str() );
-    Shader spotLightClrShader(getPath("source/shaders/SpotLightColoredShader.vs").string().c_str(), 
-                               getPath("source/shaders/SpotLightColoredShader.fs").string().c_str() );
+    Shader spotLightTexShader(getPath("source/shaders/SpotLightShadowTexShader.vs").string().c_str(), 
+                               getPath("source/shaders/SpotLightShadowTexShader.fs").string().c_str() );
+    Shader spotLightClrShader(getPath("source/shaders/SpotLightShadowClrShader.vs").string().c_str(), 
+                               getPath("source/shaders/SpotLightShadowClrShader.fs").string().c_str() );
     Shader lightCubeShader(getPath("source/shaders/colorMVPShader.vs").string().c_str(), 
                            getPath("source/shaders/colorMVPShader.fs").string().c_str() );
     Shader depthMappingShader(getPath("source/shaders/ShadowMapDepthShader.vs").string().c_str(), 
@@ -210,6 +218,13 @@ int main()
 
     dirLightClrShader.use();
     dirLightClrShader.setInt("shadowMap", 0);
+
+    spotLightTexShader.use();
+    spotLightTexShader.setInt("texture_diffuse0", 0);
+    spotLightTexShader.setInt("shadowMap", 1);
+
+    spotLightClrShader.use();
+    spotLightClrShader.setInt("shadowMap", 0);
      
     // Lights settings
     PointLight* pointLight = new PointLight;
@@ -221,7 +236,7 @@ int main()
     pointLight->linear = 0.09f;
     pointLight->quadratic = 0.032f;
     pointLight->nearPlane = 0.1f;
-    pointLight->farPlane = 20.0f;
+    pointLight->farPlane = 40.0f;
     pointLight->fov = 95.0f;
     pointLight->projection = glm::perspective(glm::radians(pointLight->fov), 1.0f, pointLight->nearPlane, pointLight->farPlane);
 
@@ -238,14 +253,17 @@ int main()
     SpotLight* spotLight = new SpotLight;
     spotLight->position = glm::vec3(1.0f);
     spotLight->direction = glm::vec3(1.0f);
-    spotLight->cutOff = glm::cos(glm::radians(12.5f));
-    spotLight->outerCutOff = glm::cos(glm::radians(17.5f));
+    spotLight->cutOff = glm::cos(glm::radians(15.0f));
+    spotLight->outerCutOff = glm::cos(glm::radians(20.0f));
     spotLight->ambient = glm::vec3(0.1f);
     spotLight->diffuse = glm::vec3(1.0f);
     spotLight->specular = glm::vec3(1.0f);
     spotLight->constant = 1.0f;
     spotLight->linear = 0.09f;
     spotLight->quadratic = 0.032f;
+    spotLight->nearPlane = 0.1f;
+    spotLight->farPlane = 50.0f;
+    spotLight->projection = glm::perspective(glm::radians(75.0f), 1.0f, spotLight->nearPlane, spotLight->farPlane);
 
     // Render batches
     RenderBatch phongTexObjects;
@@ -256,7 +274,7 @@ int main()
     // -----------------------
     const unsigned int SHADOW_WIDTH = 1024, SHADOW_HEIGHT = 1024;
 
-    // For Directional Light
+    /// ------- FOR DIRECTIONAL LIGHT --------
     glGenFramebuffers(1, &(dirLight->depthMapFBO));
     glGenTextures(1, &(dirLight->depthMap)); // create depth texture
     glBindTexture(GL_TEXTURE_2D, (dirLight->depthMap));
@@ -273,7 +291,7 @@ int main()
     glDrawBuffer(GL_NONE);
     glReadBuffer(GL_NONE);
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
-    // For Point Light
+    // ------- FOR POINTLIGHT --------
     glGenFramebuffers(1, &(pointLight->depthMapFBO));
     glGenTextures(1, &(pointLight->depthMap)); // create depth texture
     glBindTexture(GL_TEXTURE_2D, (pointLight->depthMap));
@@ -286,6 +304,22 @@ int main()
     // attach depth texture as FBO's depth buffer
     glBindFramebuffer(GL_FRAMEBUFFER, (pointLight->depthMapFBO));
     glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, (pointLight->depthMap), 0);
+    glDrawBuffer(GL_NONE);
+    glReadBuffer(GL_NONE);
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    // ------- FOR SPOTLIGHT --------
+    glGenFramebuffers(1, &(spotLight->depthMapFBO));
+    glGenTextures(1, &(spotLight->depthMap)); // create depth texture
+    glBindTexture(GL_TEXTURE_2D, (spotLight->depthMap));
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT, SHADOW_WIDTH, SHADOW_HEIGHT, 0, GL_DEPTH_COMPONENT, GL_FLOAT, NULL);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
+    glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, borderColor);
+    // attach depth texture as FBO's depth buffer
+    glBindFramebuffer(GL_FRAMEBUFFER, (spotLight->depthMapFBO));
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, (spotLight->depthMap), 0);
     glDrawBuffer(GL_NONE);
     glReadBuffer(GL_NONE);
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
@@ -445,10 +479,37 @@ int main()
         }
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
+        // RENDER DEPTH MAP FOR SPOT LIGHT
+        spotLight->position = camera.Position + camera.Right*0.6f - camera.WorldUp*0.7f;
+        spotLight->direction = camera.Front;
+        spotLight->view = glm::lookAt(spotLight->position, spotLight->position + spotLight->direction, glm::vec3(0.0, 1.0, 0.0));
+        spotLight->spaceMatrix = spotLight->projection * spotLight->view;
+        // render the scene to the buffer
+        glViewport(0, 0, SHADOW_WIDTH, SHADOW_HEIGHT);
+        glBindFramebuffer(GL_FRAMEBUFFER, (spotLight->depthMapFBO));
+        glClear(GL_DEPTH_BUFFER_BIT);
+        depthMappingShader.use();
+        depthMappingShader.setMat4("lightSpaceMat", spotLight->spaceMatrix);
+        // Render the textured objects
+        for(auto& toRender: phongTexObjects) {
+            depthMappingShader.setMat4("model", toRender->transform);
+            // bind textures on corresponding texture units
+            glBindVertexArray(toRender->VAO);
+            glDrawElements(GL_TRIANGLES, toRender->indexCount, GL_UNSIGNED_INT, 0);
+        }
+        // Render the colored objects
+        for(auto& toRender: phongClrObjects) {
+            // material properties
+            depthMappingShader.setMat4("model", toRender->transform);
+            // bind textures on corresponding texture units
+            glBindVertexArray(toRender->VAO);
+            glDrawElements(GL_TRIANGLES, toRender->indexCount, GL_UNSIGNED_INT, 0);
+        }
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
         // reset viewport
         glViewport(0, 0, SCR_WIDTH, SCR_HEIGHT);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
         //glCullFace(GL_BACK);
         // 2. render scene as normal using the generated depth/shadow map  
         // --------------------------------------------------------------
@@ -480,10 +541,9 @@ int main()
         }
         else if (currentLighting==ELightType::Spot)
         {
-            spotLight->position = camera.Position;
-            spotLight->direction = camera.Front;
             currentLightTexShader->setVec3("light.position", spotLight->position);
             currentLightTexShader->setVec3("light.direction", spotLight->direction);
+            currentLightTexShader->setMat4("lightSpaceMat", spotLight->spaceMatrix);
             currentLightTexShader->setVec3("light.ambient", spotLight->ambient);
             currentLightTexShader->setVec3("light.diffuse", spotLight->diffuse);
             currentLightTexShader->setVec3("light.specular", spotLight->specular);
@@ -491,7 +551,9 @@ int main()
             currentLightTexShader->setFloat("light.outerCutOff", spotLight->outerCutOff);
             currentLightTexShader->setFloat("light.constant", spotLight->constant);
             currentLightTexShader->setFloat("light.linear", spotLight->linear);
-            currentLightTexShader->setFloat("light.quadratic", spotLight->quadratic);	
+            currentLightTexShader->setFloat("light.quadratic", spotLight->quadratic);
+            glActiveTexture(GL_TEXTURE1);
+            glBindTexture(GL_TEXTURE_2D, spotLight->depthMap);	
         }
         // view/projection transformations
         currentLightTexShader->setVec3("viewPos", camera.Position);
@@ -542,6 +604,7 @@ int main()
         {
             currentLightClrShader->setVec3("light.position", spotLight->position);
             currentLightClrShader->setVec3("light.direction", spotLight->direction);
+            currentLightClrShader->setMat4("lightSpaceMat", spotLight->spaceMatrix);
             currentLightClrShader->setVec3("light.ambient", spotLight->ambient);
             currentLightClrShader->setVec3("light.diffuse", spotLight->diffuse);
             currentLightClrShader->setVec3("light.specular", spotLight->specular);
@@ -549,7 +612,9 @@ int main()
             currentLightClrShader->setFloat("light.outerCutOff", spotLight->outerCutOff);
             currentLightClrShader->setFloat("light.constant", spotLight->constant);
             currentLightClrShader->setFloat("light.linear", spotLight->linear);
-            currentLightClrShader->setFloat("light.quadratic", spotLight->quadratic);	
+            currentLightClrShader->setFloat("light.quadratic", spotLight->quadratic);
+            glActiveTexture(GL_TEXTURE0);
+            glBindTexture(GL_TEXTURE_2D, spotLight->depthMap);	
         }
         // view/projection transformations
         currentLightClrShader->setVec3("viewPos", camera.Position);
@@ -584,7 +649,8 @@ int main()
         if (currentDepthMap != EDepthMap::None) {
             depthDebugShader.use();
             glActiveTexture(GL_TEXTURE0);
-            if (currentLighting==ELightType::Point) {
+            if (currentLighting==ELightType::Point) 
+            {
                 glBindTexture(GL_TEXTURE_2D, pointLight->depthMap);
                 depthDebugShader.setBool("orthographic", false);
                 depthDebugShader.setFloat("nearPlane", pointLight->nearPlane);
@@ -596,6 +662,13 @@ int main()
                 depthDebugShader.setBool("orthographic", true);
                 depthDebugShader.setFloat("nearPlane", dirLight->nearPlane);
                 depthDebugShader.setFloat("farPlane", dirLight->farPlane);
+            }
+            else if (currentLighting==ELightType::Spot) 
+            {
+                glBindTexture(GL_TEXTURE_2D, spotLight->depthMap);
+                depthDebugShader.setBool("orthographic", false);
+                depthDebugShader.setFloat("nearPlane", spotLight->nearPlane);
+                depthDebugShader.setFloat("farPlane", spotLight->farPlane);
             }
             glBindVertexArray(depthQuad->VAO);
             glDrawElements(GL_TRIANGLES, depthQuad->indexCount, GL_UNSIGNED_INT, 0);
