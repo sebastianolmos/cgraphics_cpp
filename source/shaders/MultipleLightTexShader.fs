@@ -58,7 +58,7 @@ uniform sampler2D texture_diffuse0;
 uniform vec3 viewPos;
 uniform Material material;
 
-uniform DirLight dirLights[NR_DIR_LIGHTS];
+uniform DirectionalLight dirLights[NR_DIR_LIGHTS];
 uniform PointLight pointLights[NR_POINT_LIGHTS];
 uniform SpotLight spotLights[NR_SPOT_LIGHTS];
 
@@ -82,7 +82,7 @@ void main()
         result += spotLights[i].on ? CalcSpotLight(spotLights[i], norm, FragPos, viewDir) : vec3(0.0, 0.0, 0.0);
 
     vec4 fragOriginalColor = texture(texture_diffuse0, FragTexCoords);
-    vec3 resultFinal = result * fragOriginalColor.rgb
+    vec3 resultFinal = result * fragOriginalColor.rgb;
     FragColor = vec4(resultFinal, fragOriginalColor[3]);
 } 
 

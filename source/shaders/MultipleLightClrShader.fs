@@ -55,7 +55,7 @@ uniform vec3 viewPos;
 uniform Material material;
 uniform vec3 color;
 
-uniform DirLight dirLights[NR_DIR_LIGHTS];
+uniform DirectionalLight dirLights[NR_DIR_LIGHTS];
 uniform PointLight pointLights[NR_POINT_LIGHTS];
 uniform SpotLight spotLights[NR_SPOT_LIGHTS];
 
@@ -78,7 +78,7 @@ void main()
     for(int i = 0; i < NR_SPOT_LIGHTS; i++)
         result += spotLights[i].on ? CalcSpotLight(spotLights[i], norm, FragPos, viewDir) : vec3(0.0, 0.0, 0.0);
 
-    vec3 resultFinal = result * color
+    vec3 resultFinal = result * color;
     FragColor = vec4(resultFinal, 1.0f);
 } 
 

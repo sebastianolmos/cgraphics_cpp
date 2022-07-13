@@ -22,7 +22,7 @@ const unsigned int SCR_WIDTH = 1200;
 const unsigned int SCR_HEIGHT = 800;
 
 // camera
-CameraFirstPerson camera(glm::vec3(0.0f, 0.1f, 0.0f));
+CameraFirstPerson camera(glm::vec3(0.0f, 1.5f, 0.0f));
 float lastX = SCR_WIDTH / 2.0f;
 float lastY = SCR_HEIGHT / 2.0f;
 bool firstMouse = true;
@@ -148,29 +148,18 @@ int main()
 
     // build and compile our shader zprogram
     // ------------------------------------
-    Shader pointLightTexShader(getPath("source/shaders/PointLightTexturedShader.vs").string().c_str(), 
-                               getPath("source/shaders/PointLightTexturedShader.fs").string().c_str() );
-    Shader pointLightClrShader(getPath("source/shaders/PointLightColoredShader.vs").string().c_str(), 
-                               getPath("source/shaders/PointLightColoredShader.fs").string().c_str() );
-    Shader dirLightTexShader(getPath("source/shaders/DirLightTexturedShader.vs").string().c_str(), 
-                               getPath("source/shaders/DirLightTexturedShader.fs").string().c_str() );
-    Shader dirLightClrShader(getPath("source/shaders/DirLightColoredShader.vs").string().c_str(), 
-                               getPath("source/shaders/DirLightColoredShader.fs").string().c_str() );
-    Shader spotLightTexShader(getPath("source/shaders/SpotLightTexturedShader.vs").string().c_str(), 
-                               getPath("source/shaders/SpotLightTexturedShader.fs").string().c_str() );
-    Shader spotLightClrShader(getPath("source/shaders/SpotLightColoredShader.vs").string().c_str(), 
-                               getPath("source/shaders/SpotLightColoredShader.fs").string().c_str() );
     Shader lightCubeShader(getPath("source/shaders/colorMVPShader.vs").string().c_str(), 
                            getPath("source/shaders/colorMVPShader.fs").string().c_str() );
-    Shader* currentLightTexShader = nullptr;
-    Shader* currentLightClrShader = nullptr;
+
+    Shader* lightClrShader = new Shader();
+    Shader* lightTexShader = new Shader();
      
     // Lights settings
 
     PointLights pointLights;
 
     shared_ptr<PointLight> pLight1 = make_shared<PointLight>();
-    pLight1->position = glm::vec3(1.2f, 1.2f, 1.0f);
+    pLight1->position = glm::vec3(1.2f, 1.2f, 3.0f);
     pLight1->ambient = glm::vec3(0.5f);
     pLight1->diffuse = glm::vec3(1.0f);
     pLight1->specular = glm::vec3(1.0f);
@@ -187,6 +176,7 @@ int main()
     dLight1->ambient = glm::vec3(0.5f);
     dLight1->diffuse = glm::vec3(1.0f);
     dLight1->specular = glm::vec3(1.0f);
+    dirLights.push_back(dLight1);
 
 
     SpotLights spotLights;
@@ -202,17 +192,15 @@ int main()
     sLight1->constant = 1.0f;
     sLight1->linear = 0.09f;
     sLight1->quadratic = 0.032f;
+    spotLights.push_back(sLight1);
 
-    // Replace the amount of lights in the shader code
-    std::string shaderString = "#define N_LIGHTS $NL$\nuniform vec3 color;";
-    cout << shaderString << endl;
-    // Get the first occurrence
-    std::string replacement = "$NL$";
-    size_t pos = shaderString.find(replacement);
-    // Replace this occurrence of Sub String
-    shaderString.replace(pos, replacement.size(), "5");
-    cout << shaderString << endl;
-
+    // Init the shaders with the exact number of lights
+    lightClrShader->StartUp(getPath("source/shaders/MultipleLightClrShader.vs").string().c_str(), 
+                               getPath("source/shaders/MultipleLightClrShader.fs").string().c_str(),
+                               dirLights.size(), pointLights.size(), spotLights.size());
+    lightTexShader->StartUp(getPath("source/shaders/MultipleLightTexShader.vs").string().c_str(), 
+                               getPath("source/shaders/MultipleLightTexShader.fs").string().c_str(),
+                               dirLights.size(), pointLights.size(), spotLights.size());    
 
     // Render batches
     RenderBatch phongTexObjects;
@@ -285,70 +273,64 @@ int main()
         rotBox->transform = glm::rotate(rotBox->transform, (float)glfwGetTime()*1.0f, 
                                         glm::vec3(0.0f, 0.0f, 1.0f));
         rotBox->transform = glm::scale(rotBox->transform, glm::vec3(1.2f, 1.2f, 4.0f));
+        
+        spotLights[0]->position = glm::vec3(-5.0f, 1.0f, 0.0f);
+        spotLights[0]->direction = camera.Front;
 
-        switch (currentLighting)
-        {
-        case ELightType::Point:
-            currentLightTexShader = &pointLightTexShader;
-            currentLightClrShader = &pointLightClrShader;
-            break;
-        case ELightType::Directional:
-            currentLightTexShader = &dirLightTexShader;
-            currentLightClrShader = &dirLightClrShader;
-            break;
-        case ELightType::Spot:
-            currentLightTexShader = &spotLightTexShader;
-            currentLightClrShader = &spotLightClrShader;
-            break;
-        default:
-            break;
-        }
+
         // be sure to activate shader when setting uniforms/drawing objects
-        currentLightTexShader->use();
-        // light properties
-        if (currentLighting==ELightType::Point) {
-            currentLightTexShader->setVec3("light.position", pointLights[0]->position);
-            currentLightTexShader->setVec3("light.ambient", pointLights[0]->ambient);
-            currentLightTexShader->setVec3("light.diffuse", pointLights[0]->diffuse);
-            currentLightTexShader->setVec3("light.specular", pointLights[0]->specular);
-            currentLightTexShader->setFloat("light.constant", pointLights[0]->constant);
-            currentLightTexShader->setFloat("light.linear", pointLights[0]->linear);
-            currentLightTexShader->setFloat("light.quadratic", pointLights[0]->quadratic);	
-        }
-        else if (currentLighting==ELightType::Directional)
-        {
-            currentLightTexShader->setVec3("light.direction", dirLights[0]->direction);
-            currentLightTexShader->setVec3("light.ambient", dirLights[0]->ambient);
-            currentLightTexShader->setVec3("light.diffuse", dirLights[0]->diffuse);
-            currentLightTexShader->setVec3("light.specular", dirLights[0]->specular);
-        }
-        else if (currentLighting==ELightType::Spot)
-        {
-            spotLights[0]->position = camera.Position;
-            spotLights[0]->direction = camera.Front;
-            currentLightTexShader->setVec3("light.position", spotLights[0]->position);
-            currentLightTexShader->setVec3("light.direction", spotLights[0]->direction);
-            currentLightTexShader->setVec3("light.ambient", spotLights[0]->ambient);
-            currentLightTexShader->setVec3("light.diffuse", spotLights[0]->diffuse);
-            currentLightTexShader->setVec3("light.specular", spotLights[0]->specular);
-            currentLightTexShader->setFloat("light.cutOff", spotLights[0]->cutOff);
-            currentLightTexShader->setFloat("light.outerCutOff", spotLights[0]->outerCutOff);
-            currentLightTexShader->setFloat("light.constant", spotLights[0]->constant);
-            currentLightTexShader->setFloat("light.linear", spotLights[0]->linear);
-            currentLightTexShader->setFloat("light.quadratic", spotLights[0]->quadratic);	
-        }
+        lightTexShader->use();
+        
         // view/projection transformations
-        currentLightTexShader->setVec3("viewPos", camera.Position);
+        lightTexShader->setVec3("viewPos", camera.Position);
         glm::mat4 projection = glm::perspective(glm::radians(camera.Zoom), (float)SCR_WIDTH / (float)SCR_HEIGHT, 0.1f, 100.0f);
-        currentLightTexShader->setMat4("projection", projection);
-        currentLightTexShader->setMat4("view", camera.GetViewMatrix());
+        lightTexShader->setMat4("projection", projection);
+        lightTexShader->setMat4("view", camera.GetViewMatrix());
+
+        // Directional Lights
+        for (int i = 0; i < dirLights.size(); i++) {
+            string number = to_string(i);
+            lightTexShader->setVec3("dirLights["+ number + "].direction", dirLights[i]->direction);
+            lightTexShader->setVec3("dirLights["+ number + "].ambient", dirLights[i]->ambient);
+            lightTexShader->setVec3("dirLights["+ number + "].diffuse", dirLights[i]->diffuse);
+            lightTexShader->setVec3("dirLights["+ number + "].specular", dirLights[i]->specular);
+            lightTexShader->setBool("dirLights["+ number + "].on", lightsState[i]);
+        }
+        // Point Lights
+        for (int i = 0; i < pointLights.size(); i++) {
+            string number = to_string(i);
+            lightTexShader->setVec3("pointLights["+ number + "].position", pointLights[i]->position);
+            lightTexShader->setVec3("pointLights["+ number + "].ambient", pointLights[i]->ambient);
+            lightTexShader->setVec3("pointLights["+ number + "].diffuse", pointLights[i]->diffuse);
+            lightTexShader->setVec3("pointLights["+ number + "].specular", pointLights[i]->specular);
+            lightTexShader->setFloat("pointLights["+ number + "].constant", pointLights[i]->constant);
+            lightTexShader->setFloat("pointLights["+ number + "].linear", pointLights[i]->linear);
+            lightTexShader->setFloat("pointLights["+ number + "].quadratic", pointLights[i]->quadratic);
+            lightTexShader->setBool("pointLights["+ number + "].on", lightsState[i+3]);
+        }
+        // Spot Lights
+        for (int i = 0; i < spotLights.size(); i++) {
+            string number = to_string(i);
+            lightTexShader->setVec3("spotLights["+ number + "].position", spotLights[i]->position);
+            lightTexShader->setVec3("spotLights["+ number + "].direction", spotLights[i]->direction);
+            lightTexShader->setVec3("spotLights["+ number + "].ambient", spotLights[i]->ambient);
+            lightTexShader->setVec3("spotLights["+ number + "].diffuse", spotLights[i]->diffuse);
+            lightTexShader->setVec3("spotLights["+ number + "].specular", spotLights[i]->specular);
+            lightTexShader->setFloat("spotLights["+ number + "].cutOff", spotLights[i]->cutOff);
+            lightTexShader->setFloat("spotLights["+ number + "].outerCutOff", spotLights[i]->outerCutOff);
+            lightTexShader->setFloat("spotLights["+ number + "].constant", spotLights[i]->constant);
+            lightTexShader->setFloat("spotLights["+ number + "].linear", spotLights[i]->linear);
+            lightTexShader->setFloat("spotLights["+ number + "].quadratic", spotLights[i]->quadratic);
+            lightTexShader->setBool("spotLights["+ number + "].on", lightsState[i+6]);	
+        }
+        // Render Textured Objects
         for(auto& toRender: phongTexObjects) {
             // material properties
-            currentLightTexShader->setVec3("material.ambient", toRender->ka);
-            currentLightTexShader->setVec3("material.diffuse", toRender->kd);
-            currentLightTexShader->setVec3("material.specular", toRender->ks); // specular lighting doesn't have full effect on this object's material
-            currentLightTexShader->setFloat("material.shininess", toRender->shininess);
-            currentLightTexShader->setMat4("model", toRender->transform);
+            lightTexShader->setVec3("material.ambient", toRender->ka);
+            lightTexShader->setVec3("material.diffuse", toRender->kd);
+            lightTexShader->setVec3("material.specular", toRender->ks);
+            lightTexShader->setFloat("material.shininess", toRender->shininess);
+            lightTexShader->setMat4("model", toRender->transform);
             // bind textures on corresponding texture units
             glBindTexture(GL_TEXTURE_2D, toRender->textureId);
             glBindVertexArray(toRender->VAO);
@@ -356,49 +338,58 @@ int main()
         }
 
         // be sure to activate shader when setting uniforms/drawing objects
-        currentLightClrShader->use();
-        // light properties
-        if (currentLighting==ELightType::Point) {
-            currentLightClrShader->setVec3("light.position", pointLights[0]->position);
-            currentLightClrShader->setVec3("light.ambient", pointLights[0]->ambient);
-            currentLightClrShader->setVec3("light.diffuse", pointLights[0]->diffuse);
-            currentLightClrShader->setVec3("light.specular", pointLights[0]->specular);
-            currentLightClrShader->setFloat("light.constant", pointLights[0]->constant);
-            currentLightClrShader->setFloat("light.linear", pointLights[0]->linear);
-            currentLightClrShader->setFloat("light.quadratic", pointLights[0]->quadratic);	
-        }
-        else if (currentLighting==ELightType::Directional)
-        {
-            currentLightClrShader->setVec3("light.direction", dirLights[0]->direction);
-            currentLightClrShader->setVec3("light.ambient", dirLights[0]->ambient);
-            currentLightClrShader->setVec3("light.diffuse", dirLights[0]->diffuse);
-            currentLightClrShader->setVec3("light.specular", dirLights[0]->specular);
-        }
-        else if (currentLighting==ELightType::Spot)
-        {
-            currentLightClrShader->setVec3("light.position", spotLights[0]->position);
-            currentLightClrShader->setVec3("light.direction", spotLights[0]->direction);
-            currentLightClrShader->setVec3("light.ambient", spotLights[0]->ambient);
-            currentLightClrShader->setVec3("light.diffuse", spotLights[0]->diffuse);
-            currentLightClrShader->setVec3("light.specular", spotLights[0]->specular);
-            currentLightClrShader->setFloat("light.cutOff", spotLights[0]->cutOff);
-            currentLightClrShader->setFloat("light.outerCutOff", spotLights[0]->outerCutOff);
-            currentLightClrShader->setFloat("light.constant", spotLights[0]->constant);
-            currentLightClrShader->setFloat("light.linear", spotLights[0]->linear);
-            currentLightClrShader->setFloat("light.quadratic", spotLights[0]->quadratic);	
-        }
+        lightClrShader->use();
+
         // view/projection transformations
-        currentLightClrShader->setVec3("viewPos", camera.Position);
-        currentLightClrShader->setMat4("projection", projection);
-        currentLightClrShader->setMat4("view", camera.GetViewMatrix());
+        lightClrShader->setVec3("viewPos", camera.Position);
+        lightClrShader->setMat4("projection", projection);
+        lightClrShader->setMat4("view", camera.GetViewMatrix());
+
+        // Directional Lights
+        for (int i = 0; i < dirLights.size(); i++) {
+            string number = to_string(i);
+            lightClrShader->setVec3("dirLights["+ number + "].direction", dirLights[i]->direction);
+            lightClrShader->setVec3("dirLights["+ number + "].ambient", dirLights[i]->ambient);
+            lightClrShader->setVec3("dirLights["+ number + "].diffuse", dirLights[i]->diffuse);
+            lightClrShader->setVec3("dirLights["+ number + "].specular", dirLights[i]->specular);
+            lightClrShader->setBool("dirLights["+ number + "].on", lightsState[i]);
+        }
+        // Point Lights
+        for (int i = 0; i < pointLights.size(); i++) {
+            string number = to_string(i);
+            lightClrShader->setVec3("pointLights["+ number + "].position", pointLights[i]->position);
+            lightClrShader->setVec3("pointLights["+ number + "].ambient", pointLights[i]->ambient);
+            lightClrShader->setVec3("pointLights["+ number + "].diffuse", pointLights[i]->diffuse);
+            lightClrShader->setVec3("pointLights["+ number + "].specular", pointLights[i]->specular);
+            lightClrShader->setFloat("pointLights["+ number + "].constant", pointLights[i]->constant);
+            lightClrShader->setFloat("pointLights["+ number + "].linear", pointLights[i]->linear);
+            lightClrShader->setFloat("pointLights["+ number + "].quadratic", pointLights[i]->quadratic);
+            lightClrShader->setBool("pointLights["+ number + "].on", lightsState[i+3]);
+        }
+        // Spot Lights
+        for (int i = 0; i < spotLights.size(); i++) {
+            string number = to_string(i);
+            lightClrShader->setVec3("spotLights["+ number + "].position", spotLights[i]->position);
+            lightClrShader->setVec3("spotLights["+ number + "].direction", spotLights[i]->direction);
+            lightClrShader->setVec3("spotLights["+ number + "].ambient", spotLights[i]->ambient);
+            lightClrShader->setVec3("spotLights["+ number + "].diffuse", spotLights[i]->diffuse);
+            lightClrShader->setVec3("spotLights["+ number + "].specular", spotLights[i]->specular);
+            lightClrShader->setFloat("spotLights["+ number + "].cutOff", spotLights[i]->cutOff);
+            lightClrShader->setFloat("spotLights["+ number + "].outerCutOff", spotLights[i]->outerCutOff);
+            lightClrShader->setFloat("spotLights["+ number + "].constant", spotLights[i]->constant);
+            lightClrShader->setFloat("spotLights["+ number + "].linear", spotLights[i]->linear);
+            lightClrShader->setFloat("spotLights["+ number + "].quadratic", spotLights[i]->quadratic);
+            lightClrShader->setBool("spotLights["+ number + "].on", lightsState[i+6]);	
+        }
+        // Render Colored Objects
         for(auto& toRender: phongClrObjects) {
             // material properties
-            currentLightClrShader->setVec3("material.ambient", toRender->ka);
-            currentLightClrShader->setVec3("material.diffuse", toRender->kd);
-            currentLightClrShader->setVec3("material.specular", toRender->ks); // specular lighting doesn't have full effect on this object's material
-            currentLightClrShader->setFloat("material.shininess", toRender->shininess);
-            currentLightClrShader->setVec3("color", toRender->color);
-            currentLightClrShader->setMat4("model", toRender->transform);
+            lightClrShader->setVec3("material.ambient", toRender->ka);
+            lightClrShader->setVec3("material.diffuse", toRender->kd);
+            lightClrShader->setVec3("material.specular", toRender->ks); 
+            lightClrShader->setFloat("material.shininess", toRender->shininess);
+            lightClrShader->setVec3("color", toRender->color);
+            lightClrShader->setMat4("model", toRender->transform);
             // bind textures on corresponding texture units
             glBindVertexArray(toRender->VAO);
             glDrawElements(GL_TRIANGLES, toRender->indexCount, GL_UNSIGNED_INT, 0);
@@ -411,7 +402,7 @@ int main()
         for(auto& light: dirLights) {
 
             lightCubeShader.setVec3("Color", (lightsState[c])?light->diffuse:glm::vec3(0.0f));
-            glm::mat4 lightTr = glm::translate(glm::mat4(1.0f), light->direction -10.0f);
+            glm::mat4 lightTr = glm::translate(glm::mat4(1.0f), light->direction * -5.0f);
             lightTr = glm::scale(lightTr, glm::vec3(0.2f));
             lightCubeShader.setMat4("model", lightTr);      
             glBindVertexArray(lightCylinder->VAO);
@@ -440,7 +431,6 @@ int main()
             glDrawArrays(GL_TRIANGLES, 0, lightCylinder->indexCount);
             c++;
         }
-
 
         // glfw: swap buffers and poll IO events (keys pressed/released, mouse moved etc.)
         // -------------------------------------------------------------------------------
@@ -491,7 +481,7 @@ void processInput(GLFWwindow* window)
         camera.ProcessKeyboard(RIGHT, deltaTime);
 
     int c = 0;
-    for (int key = GLFW_KEY_0; key <= GLFW_KEY_9; key++) {
+    for (int key = GLFW_KEY_1; key <= GLFW_KEY_9; key++) {
         if (!numberKeys[c] && glfwGetKey(window, key) == GLFW_PRESS)
             lightsState[c] = !lightsState[c];
         numberKeys[c] = glfwGetKey(window, key) == GLFW_PRESS;
