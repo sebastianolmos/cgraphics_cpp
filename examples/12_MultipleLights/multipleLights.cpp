@@ -7,6 +7,7 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
+#include <glm/gtx/transform.hpp>
 
 #include "shaders/shader.hpp"
 #include "root_directory.h"
@@ -102,6 +103,7 @@ RenderObjectPtr createClrCube(glm::vec3 color,
 RenderObjectPtr createLightCube();
 RenderObjectPtr createLightPrism();
 RenderObjectPtr createLightCylinder();
+glm::mat4 rotateFromTo(glm::vec3 a, glm::vec3 b);
 
 int main()
 {
@@ -159,40 +161,106 @@ int main()
     PointLights pointLights;
 
     shared_ptr<PointLight> pLight1 = make_shared<PointLight>();
-    pLight1->position = glm::vec3(1.2f, 1.2f, 3.0f);
-    pLight1->ambient = glm::vec3(0.5f);
+    pLight1->position = glm::vec3(1.2f, 1.5f, 3.0f);
+    pLight1->ambient = glm::vec3(0.0f);
     pLight1->diffuse = glm::vec3(1.0f);
     pLight1->specular = glm::vec3(1.0f);
     pLight1->constant = 1.0f;
     pLight1->linear = 0.09f;
     pLight1->quadratic = 0.032f;
     pointLights.push_back(pLight1);
+    shared_ptr<PointLight> pLight2 = make_shared<PointLight>();
+    pLight2->position = glm::vec3(2.2f, 0.7f, -3.0f);
+    pLight2->ambient = glm::vec3(0.0f);
+    pLight2->diffuse = glm::vec3(1.0f, 0.0f, 0.0f);
+    pLight2->specular = glm::vec3(0.5f, 0.3f, 0.3f);
+    pLight2->constant = 1.0f;
+    pLight2->linear = 0.09f;
+    pLight2->quadratic = 0.032f;
+    pointLights.push_back(pLight2);
+    shared_ptr<PointLight> pLight3 = make_shared<PointLight>();
+    pLight3->position = glm::vec3(-2.5f, 3.5f, 0.0f);
+    pLight3->ambient = glm::vec3(0.0f);
+    pLight3->diffuse = glm::vec3(0.2f, 1.0f, 0.0f);
+    pLight3->specular = glm::vec3(0.2f, 1.0f, 0.0f);
+    pLight3->constant = 1.0f;
+    pLight3->linear = 0.09f;
+    pLight3->quadratic = 0.032f;
+    pointLights.push_back(pLight3);
 
 
     DirectionalLights dirLights;
 
     shared_ptr<DirectionalLight> dLight1 = make_shared<DirectionalLight>();
     dLight1->direction = glm::vec3(1.0f, -1.0f, 0.0f);
-    dLight1->ambient = glm::vec3(0.5f);
+    dLight1->ambient = glm::vec3(0.3f);
     dLight1->diffuse = glm::vec3(1.0f);
     dLight1->specular = glm::vec3(1.0f);
     dirLights.push_back(dLight1);
+    shared_ptr<DirectionalLight> dLight2 = make_shared<DirectionalLight>();
+    dLight2->direction = glm::vec3(0.0f, -1.0f, 0.0f);
+    dLight2->ambient = glm::vec3(0.2f, 0.15f, 0.0f);
+    dLight2->diffuse = glm::vec3(0.8f, 0.6f, 0.0f);
+    dLight2->specular = glm::vec3(0.8f, 0.6f, 0.0f);
+    dirLights.push_back(dLight2);
+    shared_ptr<DirectionalLight> dLight3 = make_shared<DirectionalLight>();
+    dLight3->direction = glm::vec3(-0.2f, -0.6f, 0.5f);
+    dLight3->ambient = glm::vec3(0.07f, 0.07f, 0.1f);
+    dLight3->diffuse = glm::vec3(0.4f, 0.2f, 0.6f);
+    dLight3->specular = glm::vec3(0.1f, 0.1f, 0.15f);
+    dirLights.push_back(dLight3);
 
 
     SpotLights spotLights;
 
     shared_ptr<SpotLight> sLight1 = make_shared<SpotLight>();
-    sLight1->position = glm::vec3(1.0f);
-    sLight1->direction = glm::vec3(1.0f);
-    sLight1->cutOff = glm::cos(glm::radians(12.5f));
-    sLight1->outerCutOff = glm::cos(glm::radians(17.5f));
-    sLight1->ambient = glm::vec3(0.1f);
-    sLight1->diffuse = glm::vec3(1.0f);
-    sLight1->specular = glm::vec3(1.0f);
+    sLight1->position = glm::vec3(4.0f, 3.0f, 0.0f);
+    sLight1->direction = glm::vec3(1.0f, -1.0f, 0.0f);
+    sLight1->cutOff = glm::cos(glm::radians(10.5f));
+    sLight1->outerCutOff = glm::cos(glm::radians(15.5f));
+    sLight1->ambient = glm::vec3(0.0f);
+    sLight1->diffuse = glm::vec3(1.0f, 0.7f, 0.7f);
+    sLight1->specular = glm::vec3(0.1f, 0.07f, 0.07f);
     sLight1->constant = 1.0f;
     sLight1->linear = 0.09f;
     sLight1->quadratic = 0.032f;
     spotLights.push_back(sLight1);
+    shared_ptr<SpotLight> sLight2 = make_shared<SpotLight>();
+    sLight2->position = glm::vec3(-3.5f, 3.5f, -3.5f);
+    sLight2->direction = glm::vec3(1.0f, -1.0f, 1.0f);
+    sLight2->cutOff = glm::cos(glm::radians(25.5f));
+    sLight2->outerCutOff = glm::cos(glm::radians(30.5f));
+    sLight2->ambient = glm::vec3(0.0f);
+    sLight2->diffuse = glm::vec3(1.0f, 1.0f, 0.0f);
+    sLight2->specular = glm::vec3(1.0f, 1.0f, 0.0f);
+    sLight2->constant = 0.5f;
+    sLight2->linear = 0.03f;
+    sLight2->quadratic = 0.005f;
+    spotLights.push_back(sLight2);
+    shared_ptr<SpotLight> sLight3 = make_shared<SpotLight>();
+    sLight3->position = glm::vec3(5.0f, 6.5f, -4.0f);
+    sLight3->direction = glm::vec3(0.0f, -1.0f, 0.0f);
+    sLight3->cutOff = glm::cos(glm::radians(16.0f));
+    sLight3->outerCutOff = glm::cos(glm::radians(20.0f));
+    sLight3->ambient = glm::vec3(0.0f);
+    sLight3->diffuse = glm::vec3(0.0f, 0.5f, 1.0f);
+    sLight3->specular = glm::vec3(0.0f, 1.0f, 1.0f);
+    sLight3->constant = 1.0f;
+    sLight3->linear = 0.09f;
+    sLight3->quadratic = 0.032f;
+    spotLights.push_back(sLight3);
+    shared_ptr<SpotLight> sLight4 = make_shared<SpotLight>();
+    sLight4->position = glm::vec3(1.0f);
+    sLight4->direction = glm::vec3(0.0f, -1.0f, 0.0f);
+    sLight4->cutOff = glm::cos(glm::radians(12.5f));
+    sLight4->outerCutOff = glm::cos(glm::radians(17.5f));
+    sLight4->ambient = glm::vec3(0.0f);
+    sLight4->diffuse = glm::vec3(1.0f);
+    sLight4->specular = glm::vec3(1.0f);
+    sLight4->constant = 0.5f;
+    sLight4->linear = 0.02f;
+    sLight4->quadratic = 0.002f;
+    spotLights.push_back(sLight4);
 
     // Init the shaders with the exact number of lights
     lightClrShader->StartUp(getPath("source/shaders/MultipleLightClrShader.vs").string().c_str(), 
@@ -274,8 +342,11 @@ int main()
                                         glm::vec3(0.0f, 0.0f, 1.0f));
         rotBox->transform = glm::scale(rotBox->transform, glm::vec3(1.2f, 1.2f, 4.0f));
         
-        spotLights[0]->position = glm::vec3(-5.0f, 1.0f, 0.0f);
-        spotLights[0]->direction = camera.Front;
+        spotLights[3]->position = camera.Position +
+                                    camera.Right * 0.5f +
+                                    camera.Front * 1.5f + 
+                                    camera.Up * -0.5f;
+        spotLights[3]->direction = camera.Front;
 
 
         // be sure to activate shader when setting uniforms/drawing objects
@@ -403,10 +474,11 @@ int main()
 
             lightCubeShader.setVec3("Color", (lightsState[c])?light->diffuse:glm::vec3(0.0f));
             glm::mat4 lightTr = glm::translate(glm::mat4(1.0f), light->direction * -5.0f);
-            lightTr = glm::scale(lightTr, glm::vec3(0.2f));
+            lightTr = lightTr * rotateFromTo(light->direction, glm::vec3(0.0f, -1.0f, 0.0f));
+            lightTr = glm::scale(lightTr, glm::vec3(0.3f, 0.6f, 0.3f));
             lightCubeShader.setMat4("model", lightTr);      
             glBindVertexArray(lightCylinder->VAO);
-            glDrawArrays(GL_TRIANGLES, 0, lightCylinder->indexCount);
+            glDrawElements(GL_TRIANGLES, lightCylinder->indexCount, GL_UNSIGNED_INT, 0);
             c++;
         }
         c = 3;
@@ -414,10 +486,10 @@ int main()
 
             lightCubeShader.setVec3("Color", (lightsState[c])?light->diffuse:glm::vec3(0.0f));
             glm::mat4 lightTr = glm::translate(glm::mat4(1.0f), light->position);
-            lightTr = glm::scale(lightTr, glm::vec3(0.2f));
+            lightTr = glm::scale(lightTr, glm::vec3(0.3f));
             lightCubeShader.setMat4("model", lightTr);      
-            glBindVertexArray(lightCylinder->VAO);
-            glDrawArrays(GL_TRIANGLES, 0, lightCylinder->indexCount);
+            glBindVertexArray(lightCube->VAO);
+            glDrawElements(GL_TRIANGLES, lightCube->indexCount, GL_UNSIGNED_INT, 0);
             c++;
         }
         c = 6;
@@ -425,10 +497,11 @@ int main()
 
             lightCubeShader.setVec3("Color", (lightsState[c])?light->diffuse:glm::vec3(0.0f));
             glm::mat4 lightTr = glm::translate(glm::mat4(1.0f), light->position);
-            lightTr = glm::scale(lightTr, glm::vec3(0.2f));
+            lightTr = lightTr * rotateFromTo(light->direction, glm::vec3(0.0f, -1.0f, 0.0f));
+            lightTr = glm::scale(lightTr, glm::vec3(0.3f, 0.6f, 0.3f));
             lightCubeShader.setMat4("model", lightTr);      
-            glBindVertexArray(lightCylinder->VAO);
-            glDrawArrays(GL_TRIANGLES, 0, lightCylinder->indexCount);
+            glBindVertexArray(LightPrism->VAO);
+            glDrawElements(GL_TRIANGLES, LightPrism->indexCount, GL_UNSIGNED_INT, 0);
             c++;
         }
 
@@ -697,56 +770,62 @@ RenderObjectPtr createClrCube(glm::vec3 color, glm::vec3 ka, glm::vec3 kd, glm::
 
 RenderObjectPtr createLightCube()
 {
-    RenderObjectPtr lightObject = make_shared<RenderObject>();;
+    RenderObjectPtr lightObject = make_shared<RenderObject>();
+    unsigned int cubeEBO;
     float vertices[] = {
         -0.5f, -0.5f, -0.5f,  0.0f,  0.0f, -1.0f,
          0.5f, -0.5f, -0.5f,  0.0f,  0.0f, -1.0f,
-         0.5f,  0.5f, -0.5f,  0.0f,  0.0f, -1.0f,
-         0.5f,  0.5f, -0.5f,  0.0f,  0.0f, -1.0f,
-        -0.5f,  0.5f, -0.5f,  0.0f,  0.0f, -1.0f,
-        -0.5f, -0.5f, -0.5f,  0.0f,  0.0f, -1.0f,
+         0.5f,  0.5f, -0.5f,  0.0f,  0.0f, -1.0f, 
+        -0.5f,  0.5f, -0.5f,  0.0f,  0.0f, -1.0f, 
 
         -0.5f, -0.5f,  0.5f,  0.0f,  0.0f,  1.0f,
-         0.5f, -0.5f,  0.5f,  0.0f,  0.0f,  1.0f,
-         0.5f,  0.5f,  0.5f,  0.0f,  0.0f,  1.0f,
-         0.5f,  0.5f,  0.5f,  0.0f,  0.0f,  1.0f,
+         0.5f, -0.5f,  0.5f,  0.0f,  0.0f,  1.0f, 
+         0.5f,  0.5f,  0.5f,  0.0f,  0.0f,  1.0f, 
         -0.5f,  0.5f,  0.5f,  0.0f,  0.0f,  1.0f,
-        -0.5f, -0.5f,  0.5f,  0.0f,  0.0f,  1.0f,
 
-        -0.5f,  0.5f,  0.5f, -1.0f,  0.0f,  0.0f,
-        -0.5f,  0.5f, -0.5f, -1.0f,  0.0f,  0.0f,
+        -0.5f,  0.5f,  0.5f, -1.0f,  0.0f,  0.0f, 
+        -0.5f,  0.5f, -0.5f, -1.0f,  0.0f,  0.0f, 
         -0.5f, -0.5f, -0.5f, -1.0f,  0.0f,  0.0f,
-        -0.5f, -0.5f, -0.5f, -1.0f,  0.0f,  0.0f,
-        -0.5f, -0.5f,  0.5f, -1.0f,  0.0f,  0.0f,
-        -0.5f,  0.5f,  0.5f, -1.0f,  0.0f,  0.0f,
+        -0.5f, -0.5f,  0.5f, -1.0f,  0.0f,  0.0f, 
 
-         0.5f,  0.5f,  0.5f,  1.0f,  0.0f,  0.0f,
-         0.5f,  0.5f, -0.5f,  1.0f,  0.0f,  0.0f,
-         0.5f, -0.5f, -0.5f,  1.0f,  0.0f,  0.0f,
-         0.5f, -0.5f, -0.5f,  1.0f,  0.0f,  0.0f,
+         0.5f,  0.5f,  0.5f,  1.0f,  0.0f,  0.0f, 
+         0.5f,  0.5f, -0.5f,  1.0f,  0.0f,  0.0f, 
+         0.5f, -0.5f, -0.5f,  1.0f,  0.0f,  0.0f, 
          0.5f, -0.5f,  0.5f,  1.0f,  0.0f,  0.0f,
-         0.5f,  0.5f,  0.5f,  1.0f,  0.0f,  0.0f,
 
         -0.5f, -0.5f, -0.5f,  0.0f, -1.0f,  0.0f,
-         0.5f, -0.5f, -0.5f,  0.0f, -1.0f,  0.0f,
+         0.5f, -0.5f, -0.5f,  0.0f, -1.0f,  0.0f, 
          0.5f, -0.5f,  0.5f,  0.0f, -1.0f,  0.0f,
-         0.5f, -0.5f,  0.5f,  0.0f, -1.0f,  0.0f,
-        -0.5f, -0.5f,  0.5f,  0.0f, -1.0f,  0.0f,
-        -0.5f, -0.5f, -0.5f,  0.0f, -1.0f,  0.0f,
+        -0.5f, -0.5f,  0.5f,  0.0f, -1.0f,  0.0f, 
 
-        -0.5f,  0.5f, -0.5f,  0.0f,  1.0f,  0.0f,
+        -0.5f,  0.5f, -0.5f,  0.0f,  1.0f,  0.0f, 
          0.5f,  0.5f, -0.5f,  0.0f,  1.0f,  0.0f,
-         0.5f,  0.5f,  0.5f,  0.0f,  1.0f,  0.0f,
-         0.5f,  0.5f,  0.5f,  0.0f,  1.0f,  0.0f,
+         0.5f,  0.5f,  0.5f,  0.0f,  1.0f,  0.0f, 
         -0.5f,  0.5f,  0.5f,  0.0f,  1.0f,  0.0f,
-        -0.5f,  0.5f, -0.5f,  0.0f,  1.0f,  0.0f
     };
-    // first, configure the cube's VAO (and VBO)
+    unsigned int indices[] = {
+        0, 1, 2,     2, 3, 0,
+        4, 5, 6,     6, 7, 4,
+        8, 9, 10,    10, 11, 8,
+        12, 13, 14,  14, 15, 12,
+        16, 17, 18,  18, 19, 16,
+        20, 21, 22,  22, 23, 20        
+    };
+
     glGenVertexArrays(1, &lightObject->VAO);
     glGenBuffers(1, &lightObject->VBO);
+    glGenBuffers(1, &cubeEBO);
+    // bind the Vertex Array Object first, then bind and set vertex buffer(s), and then configure vertex attributes(s).
+    glBindVertexArray(lightObject->VAO);
     glBindBuffer(GL_ARRAY_BUFFER, lightObject->VBO);
     glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
-    glBindVertexArray(lightObject->VAO);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, cubeEBO);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STATIC_DRAW);
+
+    // position attribute
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)0);
+    glEnableVertexAttribArray(0);
+
     // note that we update the lamp's position attribute's stride to reflect the updated buffer data
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)0);
     glEnableVertexAttribArray(0);
@@ -757,120 +836,128 @@ RenderObjectPtr createLightCube()
 
 RenderObjectPtr createLightPrism()
 {
-    RenderObjectPtr lightObject = make_shared<RenderObject>();;
+    RenderObjectPtr lightObject = make_shared<RenderObject>();
+    unsigned int cubeEBO;
     float vertices[] = {
+         0.0f,  0.5f,  0.0f,  0.0f,  0.0f, -1.0f,
+        -0.5f, -0.5f,  0.5f,  0.0f,  0.0f, -1.0f,
         -0.5f, -0.5f, -0.5f,  0.0f,  0.0f, -1.0f,
-         0.5f, -0.5f, -0.5f,  0.0f,  0.0f, -1.0f,
-         0.5f,  0.5f, -0.5f,  0.0f,  0.0f, -1.0f,
-         0.5f,  0.5f, -0.5f,  0.0f,  0.0f, -1.0f,
-        -0.5f,  0.5f, -0.5f,  0.0f,  0.0f, -1.0f,
-        -0.5f, -0.5f, -0.5f,  0.0f,  0.0f, -1.0f,
-
-        -0.5f, -0.5f,  0.5f,  0.0f,  0.0f,  1.0f,
-         0.5f, -0.5f,  0.5f,  0.0f,  0.0f,  1.0f,
-         0.5f,  0.5f,  0.5f,  0.0f,  0.0f,  1.0f,
-         0.5f,  0.5f,  0.5f,  0.0f,  0.0f,  1.0f,
-        -0.5f,  0.5f,  0.5f,  0.0f,  0.0f,  1.0f,
-        -0.5f, -0.5f,  0.5f,  0.0f,  0.0f,  1.0f,
-
-        -0.5f,  0.5f,  0.5f, -1.0f,  0.0f,  0.0f,
-        -0.5f,  0.5f, -0.5f, -1.0f,  0.0f,  0.0f,
-        -0.5f, -0.5f, -0.5f, -1.0f,  0.0f,  0.0f,
-        -0.5f, -0.5f, -0.5f, -1.0f,  0.0f,  0.0f,
-        -0.5f, -0.5f,  0.5f, -1.0f,  0.0f,  0.0f,
-        -0.5f,  0.5f,  0.5f, -1.0f,  0.0f,  0.0f,
-
-         0.5f,  0.5f,  0.5f,  1.0f,  0.0f,  0.0f,
-         0.5f,  0.5f, -0.5f,  1.0f,  0.0f,  0.0f,
-         0.5f, -0.5f, -0.5f,  1.0f,  0.0f,  0.0f,
-         0.5f, -0.5f, -0.5f,  1.0f,  0.0f,  0.0f,
-         0.5f, -0.5f,  0.5f,  1.0f,  0.0f,  0.0f,
-         0.5f,  0.5f,  0.5f,  1.0f,  0.0f,  0.0f,
-
-        -0.5f, -0.5f, -0.5f,  0.0f, -1.0f,  0.0f,
-         0.5f, -0.5f, -0.5f,  0.0f, -1.0f,  0.0f,
-         0.5f, -0.5f,  0.5f,  0.0f, -1.0f,  0.0f,
-         0.5f, -0.5f,  0.5f,  0.0f, -1.0f,  0.0f,
-        -0.5f, -0.5f,  0.5f,  0.0f, -1.0f,  0.0f,
-        -0.5f, -0.5f, -0.5f,  0.0f, -1.0f,  0.0f,
-
-        -0.5f,  0.5f, -0.5f,  0.0f,  1.0f,  0.0f,
-         0.5f,  0.5f, -0.5f,  0.0f,  1.0f,  0.0f,
-         0.5f,  0.5f,  0.5f,  0.0f,  1.0f,  0.0f,
-         0.5f,  0.5f,  0.5f,  0.0f,  1.0f,  0.0f,
-        -0.5f,  0.5f,  0.5f,  0.0f,  1.0f,  0.0f,
-        -0.5f,  0.5f, -0.5f,  0.0f,  1.0f,  0.0f
+         0.5f, -0.5f,  0.5f,  0.0f,  0.0f, -1.0f,
+         0.5f, -0.5f,  -0.5f,  0.0f,  0.0f, -1.0f
     };
-    // first, configure the cube's VAO (and VBO)
+    unsigned int indices[] = {
+        1, 2, 0,
+        2, 4, 0,
+        4, 3, 0,
+        3, 1, 0,
+        1, 3, 4,   2, 1, 4
+    };
+
     glGenVertexArrays(1, &lightObject->VAO);
     glGenBuffers(1, &lightObject->VBO);
+    glGenBuffers(1, &cubeEBO);
+    // bind the Vertex Array Object first, then bind and set vertex buffer(s), and then configure vertex attributes(s).
+    glBindVertexArray(lightObject->VAO);
     glBindBuffer(GL_ARRAY_BUFFER, lightObject->VBO);
     glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
-    glBindVertexArray(lightObject->VAO);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, cubeEBO);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STATIC_DRAW);
+
+    // position attribute
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)0);
+    glEnableVertexAttribArray(0);
+
     // note that we update the lamp's position attribute's stride to reflect the updated buffer data
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)0);
     glEnableVertexAttribArray(0);
-    lightObject->indexCount = 36;
+    lightObject->indexCount = 18;
     lightObject->color = glm::vec3(1.0f);
     return lightObject;
 }
 
 RenderObjectPtr createLightCylinder()
 {
-    RenderObjectPtr lightObject = make_shared<RenderObject>();;
-    float vertices[] = {
-        -0.5f, -0.5f, -0.5f,  0.0f,  0.0f, -1.0f,
-         0.5f, -0.5f, -0.5f,  0.0f,  0.0f, -1.0f,
-         0.5f,  0.5f, -0.5f,  0.0f,  0.0f, -1.0f,
-         0.5f,  0.5f, -0.5f,  0.0f,  0.0f, -1.0f,
-        -0.5f,  0.5f, -0.5f,  0.0f,  0.0f, -1.0f,
-        -0.5f, -0.5f, -0.5f,  0.0f,  0.0f, -1.0f,
+    RenderObjectPtr lightObject = make_shared<RenderObject>();
+    unsigned int cubeEBO;
+    int segments = 32;
+    std::vector<float> vertices;
+    std::vector<unsigned int> indices;
 
-        -0.5f, -0.5f,  0.5f,  0.0f,  0.0f,  1.0f,
-         0.5f, -0.5f,  0.5f,  0.0f,  0.0f,  1.0f,
-         0.5f,  0.5f,  0.5f,  0.0f,  0.0f,  1.0f,
-         0.5f,  0.5f,  0.5f,  0.0f,  0.0f,  1.0f,
-        -0.5f,  0.5f,  0.5f,  0.0f,  0.0f,  1.0f,
-        -0.5f, -0.5f,  0.5f,  0.0f,  0.0f,  1.0f,
-
-        -0.5f,  0.5f,  0.5f, -1.0f,  0.0f,  0.0f,
-        -0.5f,  0.5f, -0.5f, -1.0f,  0.0f,  0.0f,
-        -0.5f, -0.5f, -0.5f, -1.0f,  0.0f,  0.0f,
-        -0.5f, -0.5f, -0.5f, -1.0f,  0.0f,  0.0f,
-        -0.5f, -0.5f,  0.5f, -1.0f,  0.0f,  0.0f,
-        -0.5f,  0.5f,  0.5f, -1.0f,  0.0f,  0.0f,
-
-         0.5f,  0.5f,  0.5f,  1.0f,  0.0f,  0.0f,
-         0.5f,  0.5f, -0.5f,  1.0f,  0.0f,  0.0f,
-         0.5f, -0.5f, -0.5f,  1.0f,  0.0f,  0.0f,
-         0.5f, -0.5f, -0.5f,  1.0f,  0.0f,  0.0f,
-         0.5f, -0.5f,  0.5f,  1.0f,  0.0f,  0.0f,
-         0.5f,  0.5f,  0.5f,  1.0f,  0.0f,  0.0f,
-
-        -0.5f, -0.5f, -0.5f,  0.0f, -1.0f,  0.0f,
-         0.5f, -0.5f, -0.5f,  0.0f, -1.0f,  0.0f,
-         0.5f, -0.5f,  0.5f,  0.0f, -1.0f,  0.0f,
-         0.5f, -0.5f,  0.5f,  0.0f, -1.0f,  0.0f,
-        -0.5f, -0.5f,  0.5f,  0.0f, -1.0f,  0.0f,
-        -0.5f, -0.5f, -0.5f,  0.0f, -1.0f,  0.0f,
-
-        -0.5f,  0.5f, -0.5f,  0.0f,  1.0f,  0.0f,
-         0.5f,  0.5f, -0.5f,  0.0f,  1.0f,  0.0f,
-         0.5f,  0.5f,  0.5f,  0.0f,  1.0f,  0.0f,
-         0.5f,  0.5f,  0.5f,  0.0f,  1.0f,  0.0f,
-        -0.5f,  0.5f,  0.5f,  0.0f,  1.0f,  0.0f,
-        -0.5f,  0.5f, -0.5f,  0.0f,  1.0f,  0.0f
+    float dTheta = 2*3.14159265358979323846f / segments;
+    float v0[2*6] = { 0.0f, -0.5f, 0.0f, 0.0f, 0.0f, -1.0f,
+                    0.0f, 0.5f, 0.0f, 0.0f, 0.0f,  1.0f
     };
-    // first, configure the cube's VAO (and VBO)
+    vertices.insert(vertices.end(), std::begin(v0), std::end(v0));
+
+    for (unsigned int i = 0; i < segments+1; i++) {
+        float tempX = 0.5f * glm::cos(i * dTheta);
+        float tempY = 0.5f * glm::sin(i * dTheta);
+        
+        glm::vec3 sideNormal= {glm::cos(i * dTheta), glm::sin(i * dTheta), 0};
+        glm::vec3 lowerNormal = (sideNormal + glm::vec3(0, 0, -1))/2.0f;
+        glm::vec3 upperNormal = (sideNormal + glm::vec3(0, 0,  1))/2.0f;
+        float v[4*6] = {tempX, -0.5, tempY, lowerNormal.x, lowerNormal.y, lowerNormal.z,
+                        tempX,  0.5, tempY, upperNormal.x, upperNormal.y, upperNormal.z,
+                        tempX, -0.5, tempY, lowerNormal.x, lowerNormal.y, lowerNormal.z,
+                        tempX,  0.5, tempY, upperNormal.x, upperNormal.y, upperNormal.z,
+            };
+        vertices.insert(vertices.end(), std::begin(v), std::end(v));
+
+        if (i != segments) {
+            unsigned ind[4*3] = {0    , 4*i+2, 4*i+6,
+                                    1    , 4*i+3, 4*i+7,
+                                    4*i+4, 4*i+8, 4*i+9,
+                                    4*i+9, 4*i+5, 4*i+4
+            };
+            indices.insert(indices.end(), std::begin(ind), std::end(ind));
+        }
+    }
+        
+    float* vert = &vertices[0];
+    unsigned int* indi = &indices[0];
+
     glGenVertexArrays(1, &lightObject->VAO);
     glGenBuffers(1, &lightObject->VBO);
-    glBindBuffer(GL_ARRAY_BUFFER, lightObject->VBO);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
+    glGenBuffers(1, &cubeEBO);
+    // bind the Vertex Array Object first, then bind and set vertex buffer(s), and then configure vertex attributes(s).
     glBindVertexArray(lightObject->VAO);
+    glBindBuffer(GL_ARRAY_BUFFER, lightObject->VBO);
+    glBufferData(GL_ARRAY_BUFFER, vertices.size()*sizeof(float), vert, GL_STATIC_DRAW);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, cubeEBO);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size()*sizeof(unsigned int), indi, GL_STATIC_DRAW);
+
+    // position attribute
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)0);
+    glEnableVertexAttribArray(0);
+
     // note that we update the lamp's position attribute's stride to reflect the updated buffer data
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)0);
     glEnableVertexAttribArray(0);
-    lightObject->indexCount = 36;
+    lightObject->indexCount = indices.size();
     lightObject->color = glm::vec3(1.0f);
     return lightObject;
+}
+
+glm::mat4 rotateFromTo(glm::vec3 a, glm::vec3 b)
+{
+    glm::vec3 v = glm::cross(b, a);
+    float angle = acos(glm::dot(b, a) / (glm::length(b) * glm::length(a)));
+    glm::mat4 rotmat = glm::rotate(angle, v);
+
+        // special cases lead to NaN values in the rotation matrix
+    if (glm::any(glm::isnan(rotmat * glm::vec4(1.0f, 1.0f, 1.0f, 1.0f)))) {
+        if (angle < 0.1f) {
+            rotmat = glm::mat4(1.0f);
+        }
+        else if (angle > 3.1f) {
+            // rotate about any perpendicular vector
+            rotmat = glm::rotate(angle, glm::cross(b,
+                                        glm::vec3(b.y, b.z, b.x)));
+        }
+        else {
+            assert(false);
+        }
+    }
+
+    return rotmat;
 }
