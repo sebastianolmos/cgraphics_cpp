@@ -366,19 +366,23 @@ void mouse_callback(GLFWwindow* window, double xpos, double ypos)
 
 void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
 {
-    if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS)
+    ImGuiIO& io = ImGui::GetIO();
+    if (!io.WantCaptureMouse)
     {
-        camera.SetRotDrag(true);
+        if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS)
+        {
+            camera.SetRotDrag(true);
+        }
+
+        if (button == GLFW_MOUSE_BUTTON_RIGHT && action == GLFW_PRESS)
+        {
+            camera.SetCenterDrag(true);
+        }
     }
 
     if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_RELEASE)
     {
         camera.SetRotDrag(false);
-    }
-
-    if (button == GLFW_MOUSE_BUTTON_RIGHT && action == GLFW_PRESS)
-    {
-        camera.SetCenterDrag(true);
     }
 
     if (button == GLFW_MOUSE_BUTTON_RIGHT && action == GLFW_RELEASE)
