@@ -10,7 +10,7 @@
         StartUp(vertexPath, fragmentPath);
     }
 
-    void Shader::StartUp(const char* vertexPath, const char* fragmentPath)
+    void Shader::StartUp(const char* vertexPath, const char* fragmentPath, int dirLights, int pointLights, int spotLights)
     {
         // 1. retrieve the vertex/fragment source code from filePath
         std::string vertexCode;
@@ -40,6 +40,26 @@
         {
             std::cout << "ERROR::SHADER::FILE_NOT_SUCCESFULLY_READ" << std::endl;
         }
+        // Replace the amount of lights in the fragment shader code
+        if (dirLights > 0) {
+            std::string replacement = "$ND$";
+            size_t pos = fragmentCode.find(replacement);
+            std::string lights = std::to_string(dirLights);
+            fragmentCode.replace(pos, replacement.size(), lights);
+        }
+        if (pointLights > 0) {
+            std::string replacement = "$NP$";
+            size_t pos = fragmentCode.find(replacement);
+            std::string lights = std::to_string(pointLights);
+            fragmentCode.replace(pos, replacement.size(), lights);
+        }
+        if (spotLights > 0) {
+            std::string replacement = "$NS$";
+            size_t pos = fragmentCode.find(replacement);
+            std::string lights = std::to_string(spotLights);
+            fragmentCode.replace(pos, replacement.size(), lights);
+        }
+    
         const char* vShaderCode = vertexCode.c_str();
         const char* fShaderCode = fragmentCode.c_str();
         // 2. compile shaders
