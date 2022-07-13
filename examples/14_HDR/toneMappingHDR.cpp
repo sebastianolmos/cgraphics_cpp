@@ -109,6 +109,8 @@ RenderObjectPtr createLightCube();
 RenderObjectPtr createLightPrism();
 RenderObjectPtr createLightCylinder();
 glm::mat4 rotateFromTo(glm::vec3 a, glm::vec3 b);
+void renderQuad();
+unsigned int loadTexture(const char *path, bool gammaCorrection);
 
 bool showMenu = false;
 
@@ -160,11 +162,37 @@ int main()
     // ------------------------------------
     Shader lightCubeShader(getPath("source/shaders/colorMVPShader.vs").string().c_str(), 
                            getPath("source/shaders/colorMVPShader.fs").string().c_str() );
-
     Shader* lightClrShader = new Shader();
     Shader* lightTexShader = new Shader();
+    Shader hdrShader(getPath("source/shaders/HDRShader.vs").string().c_str(), 
+                           getPath("source/shaders/HDRShader.fs").string().c_str() );
      
-    // Lights settings
+    
+    // CONFIGURE FLOATING POINT FRAMEBUFFER
+    unsigned int hdrFBO;
+    glGenFramebuffers(1, &hdrFBO);
+    // create floating point color buffer
+    unsigned int colorBuffer;
+    glGenTextures(1, &colorBuffer);
+    glBindTexture(GL_TEXTURE_2D, colorBuffer);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, SCR_WIDTH, SCR_HEIGHT, 0, GL_RGBA, GL_FLOAT, NULL);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    // create depth buffer (renderbuffer)
+    unsigned int rboDepth;
+    glGenRenderbuffers(1, &rboDepth);
+    glBindRenderbuffer(GL_RENDERBUFFER, rboDepth);
+    glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT, SCR_WIDTH, SCR_HEIGHT);
+    // attach buffers
+    glBindFramebuffer(GL_FRAMEBUFFER, hdrFBO);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, colorBuffer, 0);
+    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, rboDepth);
+    if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
+        std::cout << "Framebuffer not complete!" << std::endl;
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+
+    // LIGHTS SETTING
 
     PointLights pointLights;
 
@@ -180,8 +208,8 @@ int main()
     shared_ptr<PointLight> pLight2 = make_shared<PointLight>();
     pLight2->position = glm::vec3(2.2f, 0.7f, -3.0f);
     pLight2->ambient = glm::vec3(0.0f);
-    pLight2->diffuse = glm::vec3(1.0f, 0.0f, 0.0f);
-    pLight2->specular = glm::vec3(0.5f, 0.3f, 0.3f);
+    pLight2->diffuse = glm::vec3(2.0f, 0.5f, 0.0f);
+    pLight2->specular = glm::vec3(1.0f, 0.5f, 0.0f);
     pLight2->constant = 1.0f;
     pLight2->linear = 0.09f;
     pLight2->quadratic = 0.032f;
@@ -282,6 +310,9 @@ int main()
     RenderBatch phongTexObjects;
     RenderBatch phongClrObjects;
 
+    hdrShader.use();
+    hdrShader.setInt("hdrBuffer", 0);
+
     // Phong textured objects
     RenderObjectPtr floor = createTexCube("assets/wood.png", 5.0f);
     floor->transform = glm::translate(floor->transform, glm::vec3(0.0f, -8.0f, 0.0f));
@@ -298,7 +329,7 @@ int main()
     wall->transform = glm::translate(wall->transform, glm::vec3(16.0f, 0.0f, 0.0f));
     wall->transform = glm::scale(wall->transform, glm::vec3(16.0f));
     phongClrObjects.push_back(wall);
-    RenderObjectPtr jumpingBox = createClrCube(glm::vec3(0.3f, 0.0f, 1.0f));
+    RenderObjectPtr jumpingBox = createClrCube(glm::vec3(0.0f, 0.0f, 1.0f));
     phongClrObjects.push_back(jumpingBox);
     RenderObjectPtr rotBox = createClrCube(glm::vec3(0.2f, 1.0f, 0.0f));
     phongClrObjects.push_back(rotBox);
@@ -322,6 +353,10 @@ int main()
     ImGui_ImplGlfw_InitForOpenGL(window, true);
     ImGui_ImplOpenGL3_Init(glsl_version);
 
+    bool hdr = true;
+    float gamma = 2.2;
+    float exposure = 1.0f;
+
     // render loop
     // -----------
     while (!glfwWindowShouldClose(window))
@@ -341,10 +376,7 @@ int main()
         // -----
         processInput(window);
 
-        // render
-        // ------
-        glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
-        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+        
 
         // refreshing the transforms
         jumpingBox->transform = glm::translate(glm::mat4(1.0f), 
@@ -368,6 +400,14 @@ int main()
                                     camera.Up * -0.5f;
         spotLights[3]->direction = camera.Front;
 
+        // render
+        // ------
+        glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+        // ------- 1. RENDER SCENE INTO FLOATING POINT FRAMEBUFFER  ----------
+        glBindFramebuffer(GL_FRAMEBUFFER, hdrFBO);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
         // be sure to activate shader when setting uniforms/drawing objects
         lightTexShader->use();
@@ -525,10 +565,17 @@ int main()
             c++;
         }
 
-        // Our state
-        bool show_demo_window = true;
-        bool show_another_window = false;
-        ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        // ------- 2. NOW RENDER FLOATING POINT COLOR BUFFER TO 2D QUAD AND TONEMAP HDR COLORS TO DEFAULT'S FRAMEBUFFERS'S (CLAMPED) COLOR RANGE  ----------
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+        hdrShader.use();
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, colorBuffer);
+        hdrShader.setInt("hdr", hdr);
+        hdrShader.setFloat("exposure", exposure);
+        hdrShader.setFloat("gamma", gamma);
+        renderQuad();
+
         static float f = 0.0f;
         if (showMenu)
         {
@@ -540,11 +587,12 @@ int main()
 
             ImGui::Begin("HDR Menu");                      
 
+            ImGui::SliderFloat("Gamma", &gamma, 0.01f, 5.0f);   
             //ImGui::Text("This is some useful text.");               // Display some text (you can use a format strings too)
-            //ImGui::Checkbox("Demo Window", &show_demo_window); 
+            ImGui::Checkbox("HDR Enabled", &hdr); 
 
-            ImGui::SliderFloat("Some value", &f, 0.0f, 1.0f);          
-            ImGui::ColorEdit3("clear color", (float*)&clear_color); // Edit 3 floats representing a color
+            ImGui::SliderFloat("Exposure", &exposure, 0.0f, 5.0f);          
+            //ImGui::ColorEdit3("clear color", (float*)&clear_color); // Edit 3 floats representing a color
 
             //if (ImGui::Button("Button"))                            // Buttons return true when clicked (most widgets return true when                       edited/activated)
             //    counter++;
@@ -744,27 +792,7 @@ RenderObjectPtr createTexCube(string path, float texScale, glm::vec3 ka, glm::ve
     glBindBuffer(GL_ARRAY_BUFFER, 0);
     glBindVertexArray(0);
     // load and create a texture 
-    glGenTextures(1, &cubeObject->textureId);
-    glBindTexture(GL_TEXTURE_2D, cubeObject->textureId);
-    // set the texture wrapping parameters
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-    // set texture filtering parameters
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    // load image, create texture and generate mipmaps
-    int width, height, nrChannels;
-    unsigned char* data = stbi_load(getPath(path).string().c_str(), &width, &height, &nrChannels, 0);
-    if (data)
-    {
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, data);
-        glGenerateMipmap(GL_TEXTURE_2D);
-    }
-    else
-    {
-        std::cout << "Failed to load texture" << std::endl;
-    }
-    stbi_image_free(data);
+    cubeObject->textureId = loadTexture(getPath(path).string().c_str(), true);
     cubeObject->transform = glm::mat4(1.0f);
     cubeObject->indexCount = 36;
     cubeObject->ka = ka;
@@ -1037,4 +1065,83 @@ glm::mat4 rotateFromTo(glm::vec3 a, glm::vec3 b)
     }
 
     return rotmat;
+}
+
+// utility function for loading a 2D texture from file
+// ---------------------------------------------------
+unsigned int loadTexture(char const * path, bool gammaCorrection)
+{
+    unsigned int textureID;
+    glGenTextures(1, &textureID);
+
+    int width, height, nrComponents;
+    unsigned char *data = stbi_load(path, &width, &height, &nrComponents, 0);
+    if (data)
+    {
+        GLenum internalFormat;
+        GLenum dataFormat;
+        if (nrComponents == 1)
+        {
+            internalFormat = dataFormat = GL_RED;
+        }
+        else if (nrComponents == 3)
+        {
+            internalFormat = gammaCorrection ? GL_SRGB : GL_RGB;
+            dataFormat = GL_RGB;
+        }
+        else if (nrComponents == 4)
+        {
+            internalFormat = gammaCorrection ? GL_SRGB_ALPHA : GL_RGBA;
+            dataFormat = GL_RGBA;
+        }
+
+        glBindTexture(GL_TEXTURE_2D, textureID);
+        glTexImage2D(GL_TEXTURE_2D, 0, internalFormat, width, height, 0, dataFormat, GL_UNSIGNED_BYTE, data);
+        glGenerateMipmap(GL_TEXTURE_2D);
+
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+        stbi_image_free(data);
+    }
+    else
+    {
+        std::cout << "Texture failed to load at path: " << path << std::endl;
+        stbi_image_free(data);
+    }
+
+    return textureID;
+}
+
+// renderQuad() renders a 1x1 XY quad in NDC
+// -----------------------------------------
+unsigned int quadVAO = 0;
+unsigned int quadVBO;
+void renderQuad()
+{
+    if (quadVAO == 0)
+    {
+        float quadVertices[] = {
+            // positions        // texture Coords
+            -1.0f,  1.0f, 0.0f, 0.0f, 1.0f,
+            -1.0f, -1.0f, 0.0f, 0.0f, 0.0f,
+             1.0f,  1.0f, 0.0f, 1.0f, 1.0f,
+             1.0f, -1.0f, 0.0f, 1.0f, 0.0f,
+        };
+        // setup plane VAO
+        glGenVertexArrays(1, &quadVAO);
+        glGenBuffers(1, &quadVBO);
+        glBindVertexArray(quadVAO);
+        glBindBuffer(GL_ARRAY_BUFFER, quadVBO);
+        glBufferData(GL_ARRAY_BUFFER, sizeof(quadVertices), &quadVertices, GL_STATIC_DRAW);
+        glEnableVertexAttribArray(0);
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)0);
+        glEnableVertexAttribArray(1);
+        glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)(3 * sizeof(float)));
+    }
+    glBindVertexArray(quadVAO);
+    glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+    glBindVertexArray(0);
 }
