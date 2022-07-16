@@ -8,7 +8,6 @@ layout (location = 1) in vec3 aNormal;
 out vec3 FragPos;
 out vec3 Normal;
 out vec4 LightSpacePos[NUM_CASCADES];
-out float ClipSpacePosZ;
 
 uniform mat4 model;
 uniform mat4 view;
@@ -24,5 +23,4 @@ void main()
     for (int i = 0 ; i < NUM_CASCADES ; i++) {
         LightSpacePos[i] = FragPosLP[i] * vec4(FragPos, 1.0);
     }
-    ClipSpacePosZ = gl_Position.z;
 }

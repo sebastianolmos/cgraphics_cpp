@@ -11,9 +11,7 @@ struct Material {
 }; 
 
 struct Light {
-    // We need to render the scene from a light's perspective and thus render the scene from a 
-    // position somewhere along the lines of the light direction.
-    vec3 position;
+    vec3 direction;
 
     vec3 ambient;
     vec3 diffuse;
@@ -23,7 +21,6 @@ struct Light {
 in vec3 FragPos;  
 in vec3 Normal;
 in vec4 LightSpacePos[NUM_CASCADES];
-in float ClipSpacePosZ;
 
 // texture samplers
 uniform sampler2D shadowMap[NUM_CASCADES];
@@ -34,6 +31,8 @@ uniform Light light;
 uniform vec3 color;
 uniform float cascadeEndClipSpace[NUM_CASCADES];
 
+uniform mat4 view;
+
 float ShadowCalculation(int cascadeIndex, vec4 fragPosLightSpace)
 {
     // perform perspective divide
@@ -42,10 +41,18 @@ float ShadowCalculation(int cascadeIndex, vec4 fragPosLightSpace)
     projCoords = projCoords * 0.5 + 0.5;
     // get depth of current fragment from light's perspective
     float currentDepth = projCoords.z;
+
+    // keep the shadow at 0.0 when outside the far_plane region of the light's frustum.
+    if (currentDepth > 1.0)
+        return 0.0;
+
     // calculate bias (based on depth map resolution and slope)
     vec3 normal = normalize(Normal);
-    vec3 lightDir = normalize(light.position - FragPos);
+    vec3 lightDir = normalize(-light.direction);  
     float bias = max(0.01 * (1.0 - dot(normal, lightDir)), 0.005);
+    
+    const float biasModifier = 0.5f;
+    bias *= 1 / (cascadeEndClipSpace[cascadeIndex] * biasModifier);
     // check whether current frag pos is in shadow
     // PCF
     float shadow = 0.0;
@@ -59,10 +66,6 @@ float ShadowCalculation(int cascadeIndex, vec4 fragPosLightSpace)
         }    
     }
     shadow /= 9.0;
-    
-    // keep the shadow at 0.0 when outside the far_plane region of the light's frustum.
-    if(projCoords.z > 1.0)
-        shadow = 0.0;
         
     return shadow;
 }
@@ -74,20 +77,22 @@ void main()
   	
     // diffuse 
     vec3 norm = normalize(Normal);
-    vec3 lightDir = normalize(light.position - FragPos);
+    vec3 lightDir = normalize(-light.direction);  
     float diff = max(dot(norm, lightDir), 0.0);
     vec3 diffuse = light.diffuse * (diff * material.diffuse);  
     
     // specular
     vec3 viewDir = normalize(viewPos - FragPos);
-    vec3 halfwayDir = normalize(lightDir + viewDir);  
-    float spec = pow(max(dot(norm, halfwayDir), 0.0), material.shininess);
+    vec3 reflectDir = reflect(-lightDir, norm);
+    float spec = pow(max(dot(viewDir, reflectDir), 0.0), material.shininess);
     vec3 specular = light.specular * (spec * material.specular);  
 
     // calculate shadow
     float shadow = 0.0;
     for (int i = 0 ; i < NUM_CASCADES ; i++) {
-        if (ClipSpacePosZ <= cascadeEndClipSpace[i]) {
+        vec4 fragPosViewSpace = view * vec4(FragPos, 1.0);
+        float depthValue = abs(fragPosViewSpace.z);
+        if (depthValue <= cascadeEndClipSpace[i]) {
             shadow = ShadowCalculation(i, LightSpacePos[i]);
             break;
         }

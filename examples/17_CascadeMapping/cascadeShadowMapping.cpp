@@ -112,8 +112,8 @@ bool showCascade = false;
 int depthMapRendered = 0;
 PersProjInfo cameraProjInfo;
 float mCascadeEnd[NUM_CASCADES + 1];
-OrthoProjInfo mShadowOrthoProjInfo[NUM_CASCADES];
 DirectionalLight* dirLight;
+glm::mat4 mShadowMapProjs[NUM_CASCADES];
 
 float genRand() {
     return rand() / static_cast<float>(RAND_MAX);
@@ -124,8 +124,8 @@ int main()
     // glfw: initialize and configure
     // ------------------------------
     glfwInit();
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 6);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 
 #ifdef __APPLE__
@@ -266,28 +266,9 @@ int main()
     }
 
     float mCascadeEndClipSpace[NUM_CASCADES];
-    glm::mat4 mShadowMapProjs[NUM_CASCADES];
 
 
     // --------------------------------
-
-    /// ------- FOR DIRECTIONAL LIGHT --------
-    glGenFramebuffers(1, &(dirLight->depthMapFBO));
-    glGenTextures(1, &(dirLight->depthMap)); // create depth texture
-    glBindTexture(GL_TEXTURE_2D, (dirLight->depthMap));
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT, SHADOW_WIDTH, SHADOW_HEIGHT, 0, GL_DEPTH_COMPONENT, GL_FLOAT, NULL);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
-    float borderColor[] = { 1.0, 1.0, 1.0, 1.0 };
-    glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, borderColor);
-    // attach depth texture as FBO's depth buffer
-    glBindFramebuffer(GL_FRAMEBUFFER, (dirLight->depthMapFBO));
-    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, (dirLight->depthMap), 0);
-    glDrawBuffer(GL_NONE);
-    glReadBuffer(GL_NONE);
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
     srand(time(NULL));
     glm::vec3 center(16.0f, 5.0f, 0.0f);
@@ -364,9 +345,7 @@ int main()
 
         // 1. CALCULATE THE PROJECTION MATRIX FOR EACH CASCADE
         for (unsigned int i = 0; i < NUM_CASCADES; i++) {
-            glm::vec4 vView(0.0f, 0.0f, mCascadeEnd[i+1], 1.0f);
-            glm::vec4 vClip = projection * vView;
-            mCascadeEndClipSpace[i] = -vClip.z;
+            mCascadeEndClipSpace[i] = mCascadeEnd[i+1];
         }
         CalcOrthoProjs();
 
@@ -374,10 +353,6 @@ int main()
         glm::mat4 lightView = glm::lookAt(dirLight->position, dirLight->position + glm::normalize(dirLight->direction), glm::vec3(0.0, 1.0, 0.0));
         for (unsigned int i = 0 ; i < NUM_CASCADES ; i++) {
             // Gen the proj and view matrix
-            glm::mat4 proj = getOrthoProj(mShadowOrthoProjInfo[i]);
-            //glm::mat4 proj = glm::ortho(mShadowOrthoProjInfo[i].l, mShadowOrthoProjInfo[i].r, mShadowOrthoProjInfo[i].b, 
-            //                            mShadowOrthoProjInfo[i].t, mShadowOrthoProjInfo[i].n, mShadowOrthoProjInfo[i].f);
-            mShadowMapProjs[i] = proj * lightView;
             // render the scene to the buffer
             glViewport(0, 0, SHADOW_WIDTH, SHADOW_HEIGHT);
             glBindFramebuffer(GL_DRAW_FRAMEBUFFER, mFbo);
@@ -402,31 +377,6 @@ int main()
             }
             glBindFramebuffer(GL_FRAMEBUFFER, 0);
         }
-
-        // RENDER DEPTH MAP FOR DIRECTIONAL LIGHT
-
-        // render the scene to the buffer
-        glViewport(0, 0, SHADOW_WIDTH, SHADOW_HEIGHT);
-        glBindFramebuffer(GL_FRAMEBUFFER, (dirLight->depthMapFBO));
-        glClear(GL_DEPTH_BUFFER_BIT);
-        depthMappingShader.use();
-        depthMappingShader.setMat4("lightSpaceMat", dirLight->spaceMatrix);
-        // Render the textured objects
-        for(auto& toRender: phongTexObjects) {
-            depthMappingShader.setMat4("model", toRender->transform);
-            // bind textures on corresponding texture units
-            glBindVertexArray(toRender->VAO);
-            glDrawElements(GL_TRIANGLES, toRender->indexCount, GL_UNSIGNED_INT, 0);
-        }
-        // Render the colored objects
-        for(auto& toRender: phongClrObjects) {
-            // material properties
-            depthMappingShader.setMat4("model", toRender->transform);
-            // bind textures on corresponding texture units
-            glBindVertexArray(toRender->VAO);
-            glDrawElements(GL_TRIANGLES, toRender->indexCount, GL_UNSIGNED_INT, 0);
-        }
-        glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
         // reset viewport
         glViewport(0, 0, SCR_WIDTH, SCR_HEIGHT);
@@ -1013,65 +963,6 @@ unsigned int loadTexture(char const * path, bool gammaCorrection)
     return textureID;
 }
 
-void CalcOrthoProjs()
-{
-    glm::mat4 camView = camera.GetViewMatrix();
-    glm::mat4 camT = glm::transpose(camView);
-    glm::mat4 camInverse = glm::inverse(camT);
-
-    glm::mat4 lightM =glm::lookAt(dirLight->position, dirLight->position + glm::normalize(dirLight->direction), glm::vec3(0.0, 1.0, 0.0));
-
-    float ar = cameraProjInfo.height / cameraProjInfo.width;
-    float tanHalfHFOV = glm::tan(glm::radians(cameraProjInfo.fov / 2.0f));
-    float tanHalfVFOV = glm::tan(glm::radians((cameraProjInfo.fov * ar) / 2.0f));
-
-    for (unsigned int i = 0 ; i < NUM_CASCADES ; i++) {
-        float xn = mCascadeEnd[i]     * tanHalfHFOV;
-        float xf = mCascadeEnd[i + 1] * tanHalfHFOV;
-        float yn = mCascadeEnd[i]     * tanHalfVFOV;
-        float yf = mCascadeEnd[i + 1] * tanHalfVFOV;
-
-        glm::vec4 frustumCorners[8] = {
-            // near face
-            glm::vec4(xn,   yn, mCascadeEnd[i], 1.0),
-            glm::vec4(-xn,  yn, mCascadeEnd[i], 1.0),
-            glm::vec4(xn,  -yn, mCascadeEnd[i], 1.0),
-            glm::vec4(-xn, -yn, mCascadeEnd[i], 1.0),
-
-            // far face
-            glm::vec4(xf,   yf, mCascadeEnd[i + 1], 1.0),
-            glm::vec4(-xf,  yf, mCascadeEnd[i + 1], 1.0),
-            glm::vec4(xf,  -yf, mCascadeEnd[i + 1], 1.0),
-            glm::vec4(-xf, -yf, mCascadeEnd[i + 1], 1.0)
-        };
-
-        glm::vec4 frustumCornersL[8];
-        float minX = std::numeric_limits<float>::max();
-        float maxX = std::numeric_limits<float>::min();
-        float minY = std::numeric_limits<float>::max();
-        float maxY = std::numeric_limits<float>::min();
-        float minZ = std::numeric_limits<float>::max();
-        float maxZ = std::numeric_limits<float>::min();
-
-        for (unsigned j = 0 ; j < 8 ; j++) {
-            glm::vec4 vW = camInverse * frustumCorners[j];
-            frustumCornersL[j] = lightM * vW;
-            minX = min(minX, frustumCornersL[j].x);
-            maxX = max(maxX, frustumCornersL[j].x);
-            minY = min(minY, frustumCornersL[j].y);
-            maxY = max(maxY, frustumCornersL[j].y);
-            minZ = min(minZ, frustumCornersL[j].z);
-            maxZ = max(maxZ, frustumCornersL[j].z);
-        }
-        mShadowOrthoProjInfo[i].r = maxX;
-        mShadowOrthoProjInfo[i].l = minX;
-        mShadowOrthoProjInfo[i].b = minY;
-        mShadowOrthoProjInfo[i].t = maxY;
-        mShadowOrthoProjInfo[i].f = maxZ;
-        mShadowOrthoProjInfo[i].n = minZ;
-    }
-}
-
 glm::mat4 getOrthoProj(OrthoProjInfo& info)
 {
     glm::mat4 proj(1.0f);
@@ -1082,4 +973,95 @@ glm::mat4 getOrthoProj(OrthoProjInfo& info)
     proj[3][1] = -(info.t + info.b)/(info.t - info.b);
     proj[3][2] = -(info.f + info.n)/(info.f - info.n);
     return proj;
+}
+
+std::vector<glm::vec4> getFrustumCornersWorldSpace(const glm::mat4& projview)
+{
+    const auto inv = glm::inverse(projview);
+
+    std::vector<glm::vec4> frustumCorners;
+    for (unsigned int x = 0; x < 2; ++x)
+    {
+        for (unsigned int y = 0; y < 2; ++y)
+        {
+            for (unsigned int z = 0; z < 2; ++z)
+            {
+                const glm::vec4 pt = inv * glm::vec4(2.0f * x - 1.0f, 2.0f * y - 1.0f, 2.0f * z - 1.0f, 1.0f);
+                frustumCorners.push_back(pt / pt.w);
+            }
+        }
+    }
+
+    return frustumCorners;
+}
+
+
+std::vector<glm::vec4> getFrustumCornersWorldSpace(const glm::mat4& proj, const glm::mat4& view)
+{
+    return getFrustumCornersWorldSpace(proj * view);
+}
+
+glm::mat4 getLightSpaceMatrix(const float nearPlane, const float farPlane)
+{
+    glm::mat4 projection = glm::perspective(
+        glm::radians(camera.Zoom), (float)SCR_WIDTH / (float)SCR_HEIGHT, nearPlane,
+        farPlane);
+
+    const std::vector<glm::vec4> corners = getFrustumCornersWorldSpace(projection, camera.GetViewMatrix());
+    glm::vec3 center = glm::vec3(0, 0, 0);
+    for (const auto& v : corners)
+    {
+        center += glm::vec3(v);
+    }
+    center /= corners.size();
+
+    const glm::mat4 lightView = glm::lookAt(center - dirLight->direction, center, glm::vec3(0.0f, 1.0f, 0.0f));    
+    float minX = std::numeric_limits<float>::max();
+    float maxX = std::numeric_limits<float>::min();
+    float minY = std::numeric_limits<float>::max();
+    float maxY = std::numeric_limits<float>::min();
+    float minZ = std::numeric_limits<float>::max();
+    float maxZ = std::numeric_limits<float>::min();
+
+    for (const auto& v : corners)
+    {
+        const glm::vec4 trf = lightView * v;
+        minX = std::min(minX, trf.x);
+        maxX = std::max(maxX, trf.x);
+        minY = std::min(minY, trf.y);
+        maxY = std::max(maxY, trf.y);
+        minZ = std::min(minZ, trf.z);
+        maxZ = std::max(maxZ, trf.z);
+    }
+
+    // Tune this parameter according to the scene
+    constexpr float zMult = 10.0f;
+    if (minZ < 0)
+    {
+        minZ *= zMult;
+    }
+    else
+    {
+        minZ /= zMult;
+    }
+    if (maxZ < 0)
+    {
+        maxZ /= zMult;
+    }
+    else
+    {
+        maxZ *= zMult;
+    }
+
+    const glm::mat4 lightProjection = glm::ortho(minX, maxX, minY, maxY, minZ, maxZ);
+
+    return lightProjection * lightView;
+}
+
+void CalcOrthoProjs()
+{
+    for (size_t i = 0; i < NUM_CASCADES; ++i)
+    {
+        mShadowMapProjs[i] = getLightSpaceMatrix(mCascadeEnd[i], mCascadeEnd[i  + 1]);
+    }
 }

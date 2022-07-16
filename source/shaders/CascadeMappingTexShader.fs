@@ -22,7 +22,6 @@ in vec3 FragPos;
 in vec3 Normal;  
 in vec2 FragTexCoords;
 in vec4 LightSpacePos[NUM_CASCADES];
-in float ClipSpacePosZ;
 
 // texture samplers
 uniform sampler2D texture_diffuse0;
@@ -32,6 +31,9 @@ uniform vec3 viewPos;
 uniform Material material;
 uniform Light light;
 uniform float cascadeEndClipSpace[NUM_CASCADES];
+
+
+uniform mat4 view;
 
 void main()
 {
@@ -55,7 +57,9 @@ void main()
     // Cascade debug color
     vec3 cascadeIndicator = vec3(0.0, 0.0, 0.0);
     for (int i = 0 ; i < NUM_CASCADES ; i++) {
-        if (ClipSpacePosZ <= cascadeEndClipSpace[i]) {
+        vec4 fragPosViewSpace = view * vec4(FragPos, 1.0);
+        float depthValue = abs(fragPosViewSpace.z);
+        if (depthValue <= cascadeEndClipSpace[i]) {
             //ShadowFactor = CalcShadowFactor(i, LightSpacePos[i]);
             if (i == 0) 
                 cascadeIndicator = vec3(0.1, 0.0, 0.0);
