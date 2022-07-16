@@ -4,8 +4,13 @@ set(CGRAPHICS_HEADERS
         cameras/cameraFirstPerson.hpp
         shaders/shader.hpp
         performanceMonitor.hpp
+        assimp_glm_helpers.hpp
+        bone.hpp
+        animdata.hpp
         mesh.hpp
         model.hpp
+        animation.hpp
+        animator.hpp
 		)
 set(CGRAPHICS_SOURCES
 		shaders/shader.cpp

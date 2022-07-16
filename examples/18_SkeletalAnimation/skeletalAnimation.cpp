@@ -12,6 +12,8 @@
 #include "root_directory.h"
 #include "cameras/cameraFirstPerson.hpp"
 #include "performanceMonitor.hpp"
+#include "animator.hpp"
+#include "model.hpp"
 
 #include <iostream>
 
@@ -121,10 +123,12 @@ int main()
                                getPath("source/shaders/PointLightColoredShader.fs").string().c_str() );
     Shader lightCubeShader(getPath("source/shaders/colorMVPShader.vs").string().c_str(), 
                            getPath("source/shaders/colorMVPShader.fs").string().c_str() );
+    Shader animLightShader(getPath("source/shaders/AnimPointLightShader.vs").string().c_str(), 
+                            getPath("source/shaders/AnimPointLightShader.fs").string().c_str() );
      
     // Lights settings
     PointLight* pointLight = new PointLight;
-    pointLight->position = glm::vec3(1.2f, 1.2f, 1.0f);
+    pointLight->position = glm::vec3(0.5f, 1.2f, 1.0f);
     pointLight->ambient = glm::vec3(0.5f);
     pointLight->diffuse = glm::vec3(1.0f);
     pointLight->specular = glm::vec3(1.0f);
@@ -154,6 +158,30 @@ int main()
 
     PerformanceMonitor pMonitor(glfwGetTime(), 0.5f);
 
+    // Setup Animation
+    Model monoModel(getPath("assets/anim/akai_e_espiritu.fbx").string());
+    Animation runningAnimation(getPath("assets/anim/running.fbx").string(), &monoModel);
+    Animation walkingAnimation(getPath("assets/anim/walking.fbx").string(), &monoModel);
+	Animator animator(&runningAnimation);
+
+    stbi_set_flip_vertically_on_load(true);
+    Model wolfModel(getPath("assets/animtest/trex/T_Rex.fbx").string());
+    Animation wolfAnimation(getPath("assets/animtest/trex/T_Rex.fbx").string(), &wolfModel, 3);
+	Animator wolfAnimator(&wolfAnimation);
+
+    // BOB
+    // 12 y 13 corriendo
+    // stbi_set_flip_vertically_on_load(true);
+    // S(0.01)
+
+    // TREX
+    // 3 camina
+    // stbi_set_flip_vertically_on_load(true);
+    // S(0.01)
+
+    float animTime = 5.0f;
+    int currentAnim = 0;
+    float timer = 0.0f;
     // render loop
     // -----------
     while (!glfwWindowShouldClose(window))
@@ -232,6 +260,59 @@ int main()
             glBindVertexArray(toRender->VAO);
             glDrawElements(GL_TRIANGLES, toRender->indexCount, GL_UNSIGNED_INT, 0);
         }
+
+		animLightShader.use();
+		// view/projection transformations
+        animLightShader.setVec3("light.position", pointLight->position);
+        animLightShader.setVec3("light.ambient", pointLight->ambient);
+        animLightShader.setVec3("light.diffuse", pointLight->diffuse);
+        animLightShader.setVec3("light.specular", pointLight->specular);
+        animLightShader.setFloat("light.constant", pointLight->constant);
+        animLightShader.setFloat("light.linear", pointLight->linear);
+        animLightShader.setFloat("light.quadratic", pointLight->quadratic);
+        animLightShader.setVec3("viewPos", camera.Position);
+		animLightShader.setMat4("projection", projection);
+		animLightShader.setMat4("view", camera.GetViewMatrix());
+
+
+        timer += deltaTime;
+        if (timer > animTime) {
+            if (currentAnim == 0) {
+                animator.PlayAnimation(&runningAnimation);
+            }
+            else if (currentAnim == 1) {
+                animator.PlayAnimation(&walkingAnimation);
+            }
+            currentAnim = (currentAnim + 1) % 2;
+            timer = 0.0f;
+        }
+		animator.UpdateAnimation(deltaTime);
+        auto transforms = animator.GetFinalBoneMatrices();
+		for (int i = 0; i < transforms.size(); ++i)
+			animLightShader.setMat4("finalBonesMatrices[" + std::to_string(i) + "]", transforms[i]);
+        // Render the imported Model
+        glm::mat4 model = glm::mat4(1.0f);
+        model = glm::translate(model, glm::vec3(0.0f, 0.4f, glm::sin(glfwGetTime()*0.5f)*4.0f)); 
+        model = glm::scale(model, glm::vec3(0.01f));	
+        animLightShader.setMat4("model", model);
+		monoModel.Draw(animLightShader);
+
+        
+        animLightShader.setVec3("material.ambient", glm::vec3(0.5f));
+        animLightShader.setVec3("material.diffuse", glm::vec3(1.0f));
+        animLightShader.setVec3("material.specular", glm::vec3(1.0f)); // specular lighting doesn't have full effect on this object's material
+        animLightShader.setFloat("material.shininess", 32.0f);
+        // wolf
+        wolfAnimator.UpdateAnimation(deltaTime);
+        auto wTransforms = wolfAnimator.GetFinalBoneMatrices();
+		for (int i = 0; i < wTransforms.size(); ++i)
+			animLightShader.setMat4("finalBonesMatrices[" + std::to_string(i) + "]", wTransforms[i]);
+        // Render the imported Model
+        model = glm::mat4(1.0f);
+        model = glm::translate(model, glm::vec3(glm::sin(glfwGetTime()*0.5f)*4.0f, 0.7f + glm::sin(glfwGetTime()*1.5f)*0.5f, 0.0f)); 
+        model = glm::scale(model, glm::vec3(0.01f));	
+        animLightShader.setMat4("model", model);
+		wolfModel.Draw(animLightShader);
 
         lightCubeShader.use();
         lightCubeShader.setMat4("projection", projection);
