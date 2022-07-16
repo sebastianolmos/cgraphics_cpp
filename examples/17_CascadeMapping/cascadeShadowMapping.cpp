@@ -15,6 +15,8 @@
 
 #include <iostream>
 #include <ctime>
+#include <algorithm>    // std::min
+#include <limits>
 
 #include <iomanip>
 #include <map>
@@ -62,6 +64,25 @@ struct DirectionalLight {
     float orthoDim;
 };
 
+struct OrthoProjInfo
+{
+    float r;        // right
+    float l;        // left
+    float b;        // bottom
+    float t;        // top
+    float n;        // z near
+    float f;        // z far
+};
+
+struct PersProjInfo
+{
+    float fov;
+    float width;
+    float height;
+    float zNear;
+    float zFar;
+};
+
 typedef shared_ptr<RenderObject> RenderObjectPtr;
 typedef vector<RenderObjectPtr> RenderBatch;
 
@@ -82,8 +103,17 @@ RenderObjectPtr createClrCube(glm::vec3 color,
 RenderObjectPtr createLightCube(glm::vec3 pos);
 RenderObjectPtr createTexQuad();
 unsigned int loadTexture(const char *path, bool gammaCorrection);
+void CalcOrthoProjs();
+glm::mat4 getOrthoProj(OrthoProjInfo& info);
+
+#define NUM_CASCADES 3
 
 bool showCascade = false;
+int depthMapRendered = 0;
+PersProjInfo cameraProjInfo;
+float mCascadeEnd[NUM_CASCADES + 1];
+OrthoProjInfo mShadowOrthoProjInfo[NUM_CASCADES];
+DirectionalLight* dirLight;
 
 float genRand() {
     return rand() / static_cast<float>(RAND_MAX);
@@ -94,8 +124,8 @@ int main()
     // glfw: initialize and configure
     // ------------------------------
     glfwInit();
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 6);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 
 #ifdef __APPLE__
@@ -133,14 +163,18 @@ int main()
     glEnable(GL_DEPTH_TEST);
 
     // build and compile our shader zprogram
-    Shader dirLightTexShader(getPath("source/shaders/DirLightShadowTexShader.vs").string().c_str(), 
-                               getPath("source/shaders/DirLightShadowTexShader.fs").string().c_str() );
-    Shader dirLightClrShader(getPath("source/shaders/DirLightShadowClrShader.vs").string().c_str(), 
-                               getPath("source/shaders/DirLightShadowClrShader.fs").string().c_str() );
+    Shader dirLightTexShader(getPath("source/shaders/DirLightCSMTexShader.vs").string().c_str(), 
+                               getPath("source/shaders/DirLightCSMTexShader.fs").string().c_str() );
+    Shader dirLightClrShader(getPath("source/shaders/DirLightCSMClrShader.vs").string().c_str(), 
+                               getPath("source/shaders/DirLightCSMClrShader.fs").string().c_str() );
     Shader depthMappingShader(getPath("source/shaders/ShadowMapDepthShader.vs").string().c_str(), 
                            getPath("source/shaders/ShadowMapDepthShader.fs").string().c_str() );
     Shader depthDebugShader(getPath("source/shaders/depthMapping.vs").string().c_str(), 
                            getPath("source/shaders/depthMapping.fs").string().c_str() );
+    Shader cascadeDebugTexShader(getPath("source/shaders/CascadeMappingTexShader.vs").string().c_str(), 
+                               getPath("source/shaders/CascadeMappingTexShader.fs").string().c_str() );
+    Shader cascadeDebugClrShader(getPath("source/shaders/CascadeMappingClrShader.vs").string().c_str(), 
+                               getPath("source/shaders/CascadeMappingClrShader.fs").string().c_str() );
 
     // shader configuration
     // --------------------
@@ -149,12 +183,29 @@ int main()
 
     dirLightTexShader.use();
     dirLightTexShader.setInt("texture_diffuse0", 0);
-    dirLightTexShader.setInt("shadowMap", 1);
+    dirLightTexShader.setInt("shadowMap[0]", 1);
+    dirLightTexShader.setInt("shadowMap[1]", 2);
+    dirLightTexShader.setInt("shadowMap[2]", 3);
 
     dirLightClrShader.use();
-    dirLightClrShader.setInt("shadowMap", 0);
+    dirLightClrShader.setInt("shadowMap[0]", 0);
+    dirLightClrShader.setInt("shadowMap[1]", 1);
+    dirLightClrShader.setInt("shadowMap[2]", 2);
 
-    DirectionalLight* dirLight = new DirectionalLight;
+    cascadeDebugTexShader.use();
+    cascadeDebugTexShader.setInt("texture_diffuse0", 0);
+    cascadeDebugTexShader.setInt("shadowMap[0]", 1);
+    cascadeDebugTexShader.setInt("shadowMap[1]", 2);
+    cascadeDebugTexShader.setInt("shadowMap[2]", 3);
+
+    cascadeDebugClrShader.use();
+    cascadeDebugClrShader.setInt("shadowMap[0]", 0);
+    cascadeDebugClrShader.setInt("shadowMap[1]", 1);
+    cascadeDebugClrShader.setInt("shadowMap[2]", 2);
+
+    // ---------------------
+
+    dirLight = new DirectionalLight;
     dirLight->direction = glm::normalize(glm::vec3(1.0f, -1.0f, 0.5f));
     dirLight->ambient = glm::vec3(0.7f);
     dirLight->diffuse = glm::vec3(1.0f);
@@ -163,18 +214,62 @@ int main()
     dirLight->farPlane = 17.5f;
     dirLight->orthoDim = 10.0f;
     dirLight->projection = glm::ortho(-dirLight->orthoDim, dirLight->orthoDim, -dirLight->orthoDim, dirLight->orthoDim, dirLight->nearPlane, dirLight->farPlane);
-
+    
+    cout << "[2][3]" << dirLight->projection[2][3] << endl; // 0
+    cout << "[3][2]" << dirLight->projection[3][2] << endl; // -1
     // Render batches
     RenderBatch phongTexObjects;
     RenderBatch phongClrObjects;
     RenderBatch coloredObjects;
 
-    
     camera.MovementSpeed = 10.0f;
 
-    // configure depth map FBO for each light type
-    // -----------------------
+    cameraProjInfo.fov = camera.Zoom;
+    cameraProjInfo.height = (float)SCR_HEIGHT;
+    cameraProjInfo.width = (float)SCR_WIDTH;
+    cameraProjInfo.zNear = 0.1f;
+    cameraProjInfo.zFar = 100.0f;
+
+    // ------- CASCADE SETUP ----------
+    mCascadeEnd[0] = cameraProjInfo.zNear;
+    mCascadeEnd[1] = cameraProjInfo.zNear + (cameraProjInfo.zFar - cameraProjInfo.zNear) * 0.15;
+    mCascadeEnd[2] = cameraProjInfo.zNear + (cameraProjInfo.zFar - cameraProjInfo.zNear) * 0.45;
+    mCascadeEnd[3] = cameraProjInfo.zFar;
+
+    GLuint mFbo;
+    GLuint mShadowMap[NUM_CASCADES];
+
     const unsigned int SHADOW_WIDTH = 1024, SHADOW_HEIGHT = 1024;
+
+    // Create the FBO
+    glGenFramebuffers(1, &mFbo);
+    // Create the depth buffer
+    glGenTextures(NUM_CASCADES, mShadowMap);
+    for (unsigned int i = 0 ; i < NUM_CASCADES ; i++) {
+        glBindTexture(GL_TEXTURE_2D, mShadowMap[i]);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT32, SHADOW_WIDTH, SHADOW_HEIGHT, 0, GL_DEPTH_COMPONENT, GL_FLOAT, NULL);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_COMPARE_MODE, GL_NONE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    }
+    glBindFramebuffer(GL_FRAMEBUFFER, mFbo);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, mShadowMap[0], 0);
+    // Disable writes to the color buffer
+    glDrawBuffer(GL_NONE);
+    glReadBuffer(GL_NONE);
+    GLenum Status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+    if (Status != GL_FRAMEBUFFER_COMPLETE) {
+        printf("FB error, status: 0x%x\n", Status);
+        return false;
+    }
+
+    float mCascadeEndClipSpace[NUM_CASCADES];
+    glm::mat4 mShadowMapProjs[NUM_CASCADES];
+
+
+    // --------------------------------
 
     /// ------- FOR DIRECTIONAL LIGHT --------
     glGenFramebuffers(1, &(dirLight->depthMapFBO));
@@ -254,21 +349,62 @@ int main()
         // -----
         processInput(window);
         
-        float cameraNear = 0.1f;
-        float cameraFar = 100.0f;
         // render
         // ------
         glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-        
-        // 1. render depth of scene to texture (for each light type)
-        // --------------------------------------------------------------
-        //glCullFace(GL_FRONT);
 
-        // RENDER DEPTH MAP FOR DIRECTIONAL LIGHT
-        dirLight->position = dirLight->direction * -8.0f;
+        cameraProjInfo.fov = camera.Zoom;
+        glm::mat4 projection = glm::perspective(glm::radians(cameraProjInfo.fov), cameraProjInfo.width / cameraProjInfo.height, cameraProjInfo.zNear, cameraProjInfo.zFar);
+
+        dirLight->position = camera.Position + camera.Front * 3.0f + camera.Up *6.0f;
         dirLight->view = glm::lookAt(dirLight->position, dirLight->position + glm::normalize(dirLight->direction), glm::vec3(0.0, 1.0, 0.0));
         dirLight->spaceMatrix = dirLight->projection * dirLight->view;
+
+
+        // 1. CALCULATE THE PROJECTION MATRIX FOR EACH CASCADE
+        for (unsigned int i = 0; i < NUM_CASCADES; i++) {
+            glm::vec4 vView(0.0f, 0.0f, mCascadeEnd[i+1], 1.0f);
+            glm::vec4 vClip = projection * vView;
+            mCascadeEndClipSpace[i] = -vClip.z;
+        }
+        CalcOrthoProjs();
+
+        // 2. RENDER DEPTH OF SCENE TO TEXTURE FOR EACH CASCADE
+        glm::mat4 lightView = glm::lookAt(dirLight->position, dirLight->position + glm::normalize(dirLight->direction), glm::vec3(0.0, 1.0, 0.0));
+        for (unsigned int i = 0 ; i < NUM_CASCADES ; i++) {
+            // Gen the proj and view matrix
+            glm::mat4 proj = getOrthoProj(mShadowOrthoProjInfo[i]);
+            //glm::mat4 proj = glm::ortho(mShadowOrthoProjInfo[i].l, mShadowOrthoProjInfo[i].r, mShadowOrthoProjInfo[i].b, 
+            //                            mShadowOrthoProjInfo[i].t, mShadowOrthoProjInfo[i].n, mShadowOrthoProjInfo[i].f);
+            mShadowMapProjs[i] = proj * lightView;
+            // render the scene to the buffer
+            glViewport(0, 0, SHADOW_WIDTH, SHADOW_HEIGHT);
+            glBindFramebuffer(GL_DRAW_FRAMEBUFFER, mFbo);
+            glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, mShadowMap[i], 0);
+            glClear(GL_DEPTH_BUFFER_BIT);
+            depthMappingShader.use();
+            depthMappingShader.setMat4("lightSpaceMat", mShadowMapProjs[i]);
+            // Render the textured objects
+            for(auto& toRender: phongTexObjects) {
+                depthMappingShader.setMat4("model", toRender->transform);
+                // bind textures on corresponding texture units
+                glBindVertexArray(toRender->VAO);
+                glDrawElements(GL_TRIANGLES, toRender->indexCount, GL_UNSIGNED_INT, 0);
+            }
+            // Render the colored objects
+            for(auto& toRender: phongClrObjects) {
+                // material properties
+                depthMappingShader.setMat4("model", toRender->transform);
+                // bind textures on corresponding texture units
+                glBindVertexArray(toRender->VAO);
+                glDrawElements(GL_TRIANGLES, toRender->indexCount, GL_UNSIGNED_INT, 0);
+            }
+            glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        }
+
+        // RENDER DEPTH MAP FOR DIRECTIONAL LIGHT
+
         // render the scene to the buffer
         glViewport(0, 0, SHADOW_WIDTH, SHADOW_HEIGHT);
         glBindFramebuffer(GL_FRAMEBUFFER, (dirLight->depthMapFBO));
@@ -299,69 +435,182 @@ int main()
 
         // 2. render scene as normal using the generated depth/shadow map  
         // --------------------------------------------------------------
-        dirLightTexShader.use();
-        // light properties
-        dirLightTexShader.setVec3("light.direction", dirLight->direction);
-        dirLightTexShader.setVec3("light.position",  dirLight->position);
-        dirLightTexShader.setMat4("lightSpaceMat", dirLight->spaceMatrix);
-        dirLightTexShader.setVec3("light.ambient", dirLight->ambient);
-        dirLightTexShader.setVec3("light.diffuse", dirLight->diffuse);
-        dirLightTexShader.setVec3("light.specular", dirLight->specular);
-        glActiveTexture(GL_TEXTURE1);
-        glBindTexture(GL_TEXTURE_2D, dirLight->depthMap);
-        // view/projection transformations
-        dirLightTexShader.setVec3("viewPos", camera.Position);
-        glm::mat4 projection = glm::perspective(glm::radians(camera.Zoom), (float)SCR_WIDTH / (float)SCR_HEIGHT, cameraNear, cameraFar);
-        dirLightTexShader.setMat4("projection", projection);
-        dirLightTexShader.setMat4("view", camera.GetViewMatrix());
-        for(auto& toRender: phongTexObjects) {
-            // material properties
-            dirLightTexShader.setVec3("material.ambient", toRender->ka);
-            dirLightTexShader.setVec3("material.diffuse", toRender->kd);
-            dirLightTexShader.setVec3("material.specular", toRender->ks); // specular lighting doesn't have full effect on this object's material
-            dirLightTexShader.setFloat("material.shininess", toRender->shininess);
-            dirLightTexShader.setMat4("model", toRender->transform);
-            // bind textures on corresponding texture units
+        if (!showCascade){
+            dirLightTexShader.use();
+            // light properties
+            dirLightTexShader.setVec3("light.direction", dirLight->direction);
+            dirLightTexShader.setVec3("light.position",  dirLight->position);
+            dirLightTexShader.setVec3("light.ambient", dirLight->ambient);
+            dirLightTexShader.setVec3("light.diffuse", dirLight->diffuse);
+            dirLightTexShader.setVec3("light.specular", dirLight->specular);
+            glActiveTexture(GL_TEXTURE1);
+            glBindTexture(GL_TEXTURE_2D, mShadowMap[0]);
+            glActiveTexture(GL_TEXTURE2);
+            glBindTexture(GL_TEXTURE_2D, mShadowMap[1]);
+            glActiveTexture(GL_TEXTURE3);
+            glBindTexture(GL_TEXTURE_2D, mShadowMap[2]);
+            dirLightTexShader.setFloat("cascadeEndClipSpace[0]", mCascadeEndClipSpace[0]);
+            dirLightTexShader.setFloat("cascadeEndClipSpace[1]", mCascadeEndClipSpace[1]);
+            dirLightTexShader.setFloat("cascadeEndClipSpace[2]", mCascadeEndClipSpace[2]);
+            // view/projection transformations
+            dirLightTexShader.setVec3("viewPos", camera.Position);
+            dirLightTexShader.setMat4("projection", projection);
+            dirLightTexShader.setMat4("view", camera.GetViewMatrix());
+            dirLightTexShader.setMat4("FragPosLP[0]", mShadowMapProjs[0]);
+            dirLightTexShader.setMat4("FragPosLP[1]", mShadowMapProjs[1]);
+            dirLightTexShader.setMat4("FragPosLP[2]", mShadowMapProjs[2]);
+            for(auto& toRender: phongTexObjects) {
+                // material properties
+                dirLightTexShader.setVec3("material.ambient", toRender->ka);
+                dirLightTexShader.setVec3("material.diffuse", toRender->kd);
+                dirLightTexShader.setVec3("material.specular", toRender->ks); // specular lighting doesn't have full effect on this object's material
+                dirLightTexShader.setFloat("material.shininess", toRender->shininess);
+                dirLightTexShader.setMat4("model", toRender->transform);
+                // bind textures on corresponding texture units
+                glActiveTexture(GL_TEXTURE0);
+                glBindTexture(GL_TEXTURE_2D, toRender->textureId);
+                glBindVertexArray(toRender->VAO);
+                glDrawElements(GL_TRIANGLES, toRender->indexCount, GL_UNSIGNED_INT, 0);
+            }
+
+            // be sure to activate shader when setting uniforms/drawing objects
+            dirLightClrShader.use();
+            // light properties
+            dirLightClrShader.setVec3("light.direction", dirLight->direction);
+            dirLightClrShader.setVec3("light.position", dirLight->position);
+            dirLightClrShader.setVec3("light.ambient", dirLight->ambient);
+            dirLightClrShader.setVec3("light.diffuse", dirLight->diffuse);
+            dirLightClrShader.setVec3("light.specular", dirLight->specular);
             glActiveTexture(GL_TEXTURE0);
-            glBindTexture(GL_TEXTURE_2D, toRender->textureId);
-            glBindVertexArray(toRender->VAO);
-            glDrawElements(GL_TRIANGLES, toRender->indexCount, GL_UNSIGNED_INT, 0);
+            glBindTexture(GL_TEXTURE_2D, mShadowMap[0]);
+            glActiveTexture(GL_TEXTURE1);
+            glBindTexture(GL_TEXTURE_2D, mShadowMap[1]);
+            glActiveTexture(GL_TEXTURE2);
+            glBindTexture(GL_TEXTURE_2D, mShadowMap[2]);
+            dirLightClrShader.setFloat("cascadeEndClipSpace[0]", mCascadeEndClipSpace[0]);
+            dirLightClrShader.setFloat("cascadeEndClipSpace[1]", mCascadeEndClipSpace[1]);
+            dirLightClrShader.setFloat("cascadeEndClipSpace[2]", mCascadeEndClipSpace[2]);
+            // view/projection transformations
+            dirLightClrShader.setVec3("viewPos", camera.Position);
+            dirLightClrShader.setMat4("projection", projection);
+            dirLightClrShader.setMat4("view", camera.GetViewMatrix());
+            dirLightClrShader.setMat4("FragPosLP[0]", mShadowMapProjs[0]);
+            dirLightClrShader.setMat4("FragPosLP[1]", mShadowMapProjs[1]);
+            dirLightClrShader.setMat4("FragPosLP[2]", mShadowMapProjs[2]);
+            for(auto& toRender: phongClrObjects) {
+                // material properties
+                dirLightClrShader.setVec3("material.ambient", toRender->ka);
+                dirLightClrShader.setVec3("material.diffuse", toRender->kd);
+                dirLightClrShader.setVec3("material.specular", toRender->ks); // specular lighting doesn't have full effect on this object's material
+                dirLightClrShader.setFloat("material.shininess", toRender->shininess);
+                dirLightClrShader.setVec3("color", toRender->color);
+                dirLightClrShader.setMat4("model", toRender->transform);
+                
+                // bind textures on corresponding texture units
+                glBindVertexArray(toRender->VAO);
+                glDrawElements(GL_TRIANGLES, toRender->indexCount, GL_UNSIGNED_INT, 0);
+            }
+        }
+        else {
+            // debug render to show the cascade
+            cascadeDebugTexShader.use();
+
+            // light properties
+            cascadeDebugTexShader.setVec3("light.direction", dirLight->direction);
+            cascadeDebugTexShader.setVec3("light.position",  dirLight->position);
+            cascadeDebugTexShader.setVec3("light.ambient", dirLight->ambient);
+            cascadeDebugTexShader.setVec3("light.diffuse", dirLight->diffuse);
+            cascadeDebugTexShader.setVec3("light.specular", dirLight->specular);
+            glActiveTexture(GL_TEXTURE1);
+            glBindTexture(GL_TEXTURE_2D, mShadowMap[0]);
+            glActiveTexture(GL_TEXTURE2);
+            glBindTexture(GL_TEXTURE_2D, mShadowMap[1]);
+            glActiveTexture(GL_TEXTURE3);
+            glBindTexture(GL_TEXTURE_2D, mShadowMap[2]);
+            cascadeDebugTexShader.setFloat("cascadeEndClipSpace[0]", mCascadeEndClipSpace[0]);
+            cascadeDebugTexShader.setFloat("cascadeEndClipSpace[1]", mCascadeEndClipSpace[1]);
+            cascadeDebugTexShader.setFloat("cascadeEndClipSpace[2]", mCascadeEndClipSpace[2]);
+
+            // view/projection transformations
+            cascadeDebugTexShader.setVec3("viewPos", camera.Position);
+            glm::mat4 projection = glm::perspective(glm::radians(camera.Zoom), (float)SCR_WIDTH / (float)SCR_HEIGHT, cameraProjInfo.zNear, cameraProjInfo.zFar);
+            cascadeDebugTexShader.setMat4("projection", projection);
+            cascadeDebugTexShader.setMat4("view", camera.GetViewMatrix());
+            cascadeDebugTexShader.setMat4("FragPosLP[0]", mShadowMapProjs[0]);
+            cascadeDebugTexShader.setMat4("FragPosLP[1]", mShadowMapProjs[1]);
+            cascadeDebugTexShader.setMat4("FragPosLP[2]", mShadowMapProjs[2]);
+            for(auto& toRender: phongTexObjects) {
+                // material properties
+                cascadeDebugTexShader.setVec3("material.ambient", toRender->ka);
+                cascadeDebugTexShader.setVec3("material.diffuse", toRender->kd);
+                cascadeDebugTexShader.setVec3("material.specular", toRender->ks); // specular lighting doesn't have full effect on this object's material
+                cascadeDebugTexShader.setFloat("material.shininess", toRender->shininess);
+                cascadeDebugTexShader.setMat4("model", toRender->transform);
+                // bind textures on corresponding texture units
+                glActiveTexture(GL_TEXTURE0);
+                glBindTexture(GL_TEXTURE_2D, toRender->textureId);
+                glBindVertexArray(toRender->VAO);
+                glDrawElements(GL_TRIANGLES, toRender->indexCount, GL_UNSIGNED_INT, 0);
+            }
+
+            // be sure to activate shader when setting uniforms/drawing objects
+            cascadeDebugClrShader.use();
+            // light properties
+            cascadeDebugClrShader.setVec3("light.direction", dirLight->direction);
+            cascadeDebugClrShader.setVec3("light.position", dirLight->position);
+            cascadeDebugClrShader.setVec3("light.ambient", dirLight->ambient);
+            cascadeDebugClrShader.setVec3("light.diffuse", dirLight->diffuse);
+            cascadeDebugClrShader.setVec3("light.specular", dirLight->specular);
+            glActiveTexture(GL_TEXTURE0);
+            glBindTexture(GL_TEXTURE_2D, mShadowMap[0]);
+            glActiveTexture(GL_TEXTURE1);
+            glBindTexture(GL_TEXTURE_2D, mShadowMap[1]);
+            glActiveTexture(GL_TEXTURE2);
+            glBindTexture(GL_TEXTURE_2D, mShadowMap[2]);
+            cascadeDebugClrShader.setFloat("cascadeEndClipSpace[0]", mCascadeEndClipSpace[0]);
+            cascadeDebugClrShader.setFloat("cascadeEndClipSpace[1]", mCascadeEndClipSpace[1]);
+            cascadeDebugClrShader.setFloat("cascadeEndClipSpace[2]", mCascadeEndClipSpace[2]);
+            // view/projection transformations
+            cascadeDebugClrShader.setVec3("viewPos", camera.Position);
+            cascadeDebugClrShader.setMat4("projection", projection);
+            cascadeDebugClrShader.setMat4("view", camera.GetViewMatrix());
+            cascadeDebugClrShader.setMat4("FragPosLP[0]", mShadowMapProjs[0]);
+            cascadeDebugClrShader.setMat4("FragPosLP[1]", mShadowMapProjs[1]);
+            cascadeDebugClrShader.setMat4("FragPosLP[2]", mShadowMapProjs[2]);
+            for(auto& toRender: phongClrObjects) {
+                // material properties
+                cascadeDebugClrShader.setVec3("material.ambient", toRender->ka);
+                cascadeDebugClrShader.setVec3("material.diffuse", toRender->kd);
+                cascadeDebugClrShader.setVec3("material.specular", toRender->ks); // specular lighting doesn't have full effect on this object's material
+                cascadeDebugClrShader.setFloat("material.shininess", toRender->shininess);
+                cascadeDebugClrShader.setVec3("color", toRender->color);
+                cascadeDebugClrShader.setMat4("model", toRender->transform);
+                
+                // bind textures on corresponding texture units
+                glBindVertexArray(toRender->VAO);
+                glDrawElements(GL_TRIANGLES, toRender->indexCount, GL_UNSIGNED_INT, 0);
+            }
         }
 
-        // be sure to activate shader when setting uniforms/drawing objects
-        dirLightClrShader.use();
-        // light properties
-        dirLightClrShader.setVec3("light.direction", dirLight->direction);
-        dirLightClrShader.setVec3("light.position", dirLight->position);
-        dirLightClrShader.setMat4("lightSpaceMat", dirLight->spaceMatrix);
-        dirLightClrShader.setVec3("light.ambient", dirLight->ambient);
-        dirLightClrShader.setVec3("light.diffuse", dirLight->diffuse);
-        dirLightClrShader.setVec3("light.specular", dirLight->specular);
-        glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, dirLight->depthMap);
-        // view/projection transformations
-        dirLightClrShader.setVec3("viewPos", camera.Position);
-        dirLightClrShader.setMat4("projection", projection);
-        dirLightClrShader.setMat4("view", camera.GetViewMatrix());
-        for(auto& toRender: phongClrObjects) {
-            // material properties
-            dirLightClrShader.setVec3("material.ambient", toRender->ka);
-            dirLightClrShader.setVec3("material.diffuse", toRender->kd);
-            dirLightClrShader.setVec3("material.specular", toRender->ks); // specular lighting doesn't have full effect on this object's material
-            dirLightClrShader.setFloat("material.shininess", toRender->shininess);
-            dirLightClrShader.setVec3("color", toRender->color);
-            dirLightClrShader.setMat4("model", toRender->transform);
-            
-            // bind textures on corresponding texture units
-            glBindVertexArray(toRender->VAO);
-            glDrawElements(GL_TRIANGLES, toRender->indexCount, GL_UNSIGNED_INT, 0);
-        }
-
-
-        if (showCascade) {
+        if (depthMapRendered > 0) {
             depthDebugShader.use();
             glActiveTexture(GL_TEXTURE0);
-            glBindTexture(GL_TEXTURE_2D, dirLight->depthMap);
+            switch (depthMapRendered)
+            {
+            case 1:
+                glBindTexture(GL_TEXTURE_2D, mShadowMap[0]);
+                break;
+            case 2:
+                glBindTexture(GL_TEXTURE_2D, mShadowMap[1]);
+                break;
+            case 3:
+                glBindTexture(GL_TEXTURE_2D, mShadowMap[2]);
+                break;
+            
+            default:
+                glBindTexture(GL_TEXTURE_2D, dirLight->depthMap);
+                break;
+            }
             depthDebugShader.setBool("orthographic", true);
             depthDebugShader.setFloat("nearPlane", dirLight->nearPlane);
             depthDebugShader.setFloat("farPlane", dirLight->farPlane);
@@ -413,10 +662,24 @@ void processInput(GLFWwindow* window)
         camera.ProcessKeyboard(RIGHT, deltaTime);
 
     if (glfwGetKey(window, GLFW_KEY_1) == GLFW_PRESS) {
-        showCascade = true;
-    }
-    else {
         showCascade = false;
+        depthMapRendered = 0;
+    }
+    if (glfwGetKey(window, GLFW_KEY_2) == GLFW_PRESS) {
+        showCascade = true;
+        depthMapRendered = 0;
+    }
+    if (glfwGetKey(window, GLFW_KEY_3) == GLFW_PRESS) {
+        showCascade = false;
+        depthMapRendered = 1;
+    }
+    if (glfwGetKey(window, GLFW_KEY_4) == GLFW_PRESS) {
+        showCascade = false;
+        depthMapRendered = 2;
+    }
+    if (glfwGetKey(window, GLFW_KEY_5) == GLFW_PRESS) {
+        showCascade = false;
+        depthMapRendered = 3;
     }
 }
 
@@ -748,4 +1011,75 @@ unsigned int loadTexture(char const * path, bool gammaCorrection)
     }
 
     return textureID;
+}
+
+void CalcOrthoProjs()
+{
+    glm::mat4 camView = camera.GetViewMatrix();
+    glm::mat4 camT = glm::transpose(camView);
+    glm::mat4 camInverse = glm::inverse(camT);
+
+    glm::mat4 lightM =glm::lookAt(dirLight->position, dirLight->position + glm::normalize(dirLight->direction), glm::vec3(0.0, 1.0, 0.0));
+
+    float ar = cameraProjInfo.height / cameraProjInfo.width;
+    float tanHalfHFOV = glm::tan(glm::radians(cameraProjInfo.fov / 2.0f));
+    float tanHalfVFOV = glm::tan(glm::radians((cameraProjInfo.fov * ar) / 2.0f));
+
+    for (unsigned int i = 0 ; i < NUM_CASCADES ; i++) {
+        float xn = mCascadeEnd[i]     * tanHalfHFOV;
+        float xf = mCascadeEnd[i + 1] * tanHalfHFOV;
+        float yn = mCascadeEnd[i]     * tanHalfVFOV;
+        float yf = mCascadeEnd[i + 1] * tanHalfVFOV;
+
+        glm::vec4 frustumCorners[8] = {
+            // near face
+            glm::vec4(xn,   yn, mCascadeEnd[i], 1.0),
+            glm::vec4(-xn,  yn, mCascadeEnd[i], 1.0),
+            glm::vec4(xn,  -yn, mCascadeEnd[i], 1.0),
+            glm::vec4(-xn, -yn, mCascadeEnd[i], 1.0),
+
+            // far face
+            glm::vec4(xf,   yf, mCascadeEnd[i + 1], 1.0),
+            glm::vec4(-xf,  yf, mCascadeEnd[i + 1], 1.0),
+            glm::vec4(xf,  -yf, mCascadeEnd[i + 1], 1.0),
+            glm::vec4(-xf, -yf, mCascadeEnd[i + 1], 1.0)
+        };
+
+        glm::vec4 frustumCornersL[8];
+        float minX = std::numeric_limits<float>::max();
+        float maxX = std::numeric_limits<float>::min();
+        float minY = std::numeric_limits<float>::max();
+        float maxY = std::numeric_limits<float>::min();
+        float minZ = std::numeric_limits<float>::max();
+        float maxZ = std::numeric_limits<float>::min();
+
+        for (unsigned j = 0 ; j < 8 ; j++) {
+            glm::vec4 vW = camInverse * frustumCorners[j];
+            frustumCornersL[j] = lightM * vW;
+            minX = min(minX, frustumCornersL[j].x);
+            maxX = max(maxX, frustumCornersL[j].x);
+            minY = min(minY, frustumCornersL[j].y);
+            maxY = max(maxY, frustumCornersL[j].y);
+            minZ = min(minZ, frustumCornersL[j].z);
+            maxZ = max(maxZ, frustumCornersL[j].z);
+        }
+        mShadowOrthoProjInfo[i].r = maxX;
+        mShadowOrthoProjInfo[i].l = minX;
+        mShadowOrthoProjInfo[i].b = minY;
+        mShadowOrthoProjInfo[i].t = maxY;
+        mShadowOrthoProjInfo[i].f = maxZ;
+        mShadowOrthoProjInfo[i].n = minZ;
+    }
+}
+
+glm::mat4 getOrthoProj(OrthoProjInfo& info)
+{
+    glm::mat4 proj(1.0f);
+    proj[0][0] = 2.0f/(info.l - info.r);
+    proj[1][1] = 2.0f/(info.t - info.b);
+    proj[2][2] = 2.0f/(info.f - info.n);
+    proj[3][0] = -(info.r + info.l)/(info.r - info.l);
+    proj[3][1] = -(info.t + info.b)/(info.t - info.b);
+    proj[3][2] = -(info.f + info.n)/(info.f - info.n);
+    return proj;
 }
